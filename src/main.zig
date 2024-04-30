@@ -88,20 +88,20 @@ fn handleMessage(allocator: std.mem.Allocator, state: *State, logger: Logger, ms
 }
 
 fn handleInitialize(allocator: std.mem.Allocator, logger: Logger, msg: []const u8) !void {
-    const parsed = try std.json.parseFromSlice(lsp.InitializeRequest, allocator, msg, .{ .ignore_unknown_fields = true });
+    const parsed = try std.json.parseFromSlice(lsp.Request.Initialize, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
     const request = parsed.value;
 
     const client_info = request.params.clientInfo.?;
     logger.log("Connected to {s} {s}", .{ client_info.name, client_info.version });
 
-    const response_msg = lsp.InitializeResponse.init(request.id);
+    const response_msg = lsp.Response.Initialize.init(request.id);
 
     try writeResponse(allocator, logger, response_msg);
 }
 
 fn handleOpenDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: []const u8) !void {
-    const parsed = try std.json.parseFromSlice(lsp.DidOpenTextDocumentNotification, allocator, msg, .{ .ignore_unknown_fields = true });
+    const parsed = try std.json.parseFromSlice(lsp.Notification.DidOpenTextDocument, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     const doc = parsed.value.params.textDocument;
@@ -109,8 +109,7 @@ fn handleOpenDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, ms
     const diagnostics = try state.openDocument(doc.uri, doc.text);
     defer diagnostics.deinit();
 
-    try writeResponse(allocator, logger, lsp.PublishDiagnosticsNotification{
-        .jsonrpc = "2.0",
+    try writeResponse(allocator, logger, lsp.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .uri = doc.uri,
@@ -120,7 +119,7 @@ fn handleOpenDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, ms
 }
 
 fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: []const u8) !void {
-    const parsed = try std.json.parseFromSlice(lsp.DidChangeTextDocumentNotification, allocator, msg, .{ .ignore_unknown_fields = true });
+    const parsed = try std.json.parseFromSlice(lsp.Notification.DidChangeTextDocument, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     const doc_params = parsed.value.params;
@@ -128,8 +127,7 @@ fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, 
     const diagnostics = try state.updateDocument(doc_params.textDocument.uri, doc_params.contentChanges[0].text);
     defer diagnostics.deinit();
 
-    try writeResponse(allocator, logger, lsp.PublishDiagnosticsNotification{
-        .jsonrpc = "2.0",
+    try writeResponse(allocator, logger, lsp.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .uri = doc_params.textDocument.uri,
@@ -139,7 +137,7 @@ fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, 
 }
 
 fn handleHover(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: []const u8) !void {
-    const parsed = try std.json.parseFromSlice(lsp.HoverRequest, allocator, msg, .{ .ignore_unknown_fields = true });
+    const parsed = try std.json.parseFromSlice(lsp.Request.Hover, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     const request = parsed.value;
@@ -152,23 +150,23 @@ fn handleHover(allocator: std.mem.Allocator, state: *State, logger: Logger, msg:
 }
 
 fn handleCodeAction(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: []const u8) !void {
-    const parsed = try std.json.parseFromSlice(lsp.CodeActionRequest, allocator, msg, .{ .ignore_unknown_fields = true });
+    const parsed = try std.json.parseFromSlice(lsp.Request.CodeAction, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     const uri = parsed.value.params.textDocument.uri;
     var range = parsed.value.params.range;
     range.end.character += 2;
 
-    const edit: [1]lsp.CodeActionResponse.CodeAction.TextEdit = .{.{ .range = range, .newText = "<redacted>" }};
+    const edit: [1]lsp.TextEdit = .{.{ .range = range, .newText = "<redacted>" }};
 
     logger.log("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, range.start.line, range.start.character, range.end.line, range.end.character });
-    var change = std.json.ArrayHashMap([]const lsp.CodeActionResponse.CodeAction.TextEdit){};
+    var change = std.json.ArrayHashMap([]const lsp.TextEdit){};
     defer change.deinit(allocator);
     try change.map.put(allocator, uri, edit[0..]);
 
-    const action: [1]lsp.CodeActionResponse.CodeAction = .{.{ .title = "Censor", .edit = .{ .changes = change } }};
+    const action: [1]lsp.Response.CodeAction.Result = .{.{ .title = "Censor", .edit = .{ .changes = change } }};
 
-    const response = lsp.CodeActionResponse{ .jsonrpc = "2.0", .id = parsed.value.id, .result = action[0..] };
+    const response = lsp.Response.CodeAction{ .id = parsed.value.id, .result = action[0..] };
 
     try writeResponse(allocator, logger, response);
     _ = state;

@@ -73,10 +73,10 @@ pub const State = struct {
         return diagnostics;
     }
 
-    pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.HoverRequest.Params.Position) !lsp.HoverResponse {
+    pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Request.Hover.Params.Position) !lsp.Response.Hover {
         _ = pos;
         const buf = try std.fmt.allocPrint(self.allocator, "File: {s} Size: {}", .{ uri, self.documents.get(uri).?.len });
-        return lsp.HoverResponse.init(id, buf);
+        return lsp.Response.Hover.init(id, buf);
     }
     pub fn free(self: *State, buf: []const u8) void {
         self.allocator.free(buf);
