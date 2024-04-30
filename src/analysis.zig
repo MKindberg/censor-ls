@@ -30,18 +30,11 @@ pub const State = struct {
         var diagnostics = std.ArrayList(lsp.Diagnostic).init(self.allocator);
         errdefer diagnostics.deinit();
 
-        if (std.mem.indexOf(u8, content, "error") != null) {
+        const hits = try doc.find("error");
+        defer hits.deinit();
+        for (hits.items) |range| {
             try diagnostics.append(.{
-                .range = .{
-                    .start = .{
-                        .line = 0,
-                        .character = 0,
-                    },
-                    .end = .{
-                        .line = 0,
-                        .character = 0,
-                    },
-                },
+                .range = range,
                 .severity = 1,
                 .source = "censor-lsp",
                 .message = "Error Found!",
@@ -51,23 +44,16 @@ pub const State = struct {
     }
 
     pub fn updateDocument(self: *State, name: []u8, content: []const u8) !std.ArrayList(lsp.Diagnostic) {
-        var data = self.documents.getPtr(name).?;
-        try data.update(content);
+        var doc = self.documents.getPtr(name).?;
+        try doc.update(content);
 
         var diagnostics = std.ArrayList(lsp.Diagnostic).init(self.allocator);
         errdefer diagnostics.deinit();
-        if (std.mem.indexOf(u8, content, "error") != null) {
+        const hits = try doc.find("error");
+        defer hits.deinit();
+        for (hits.items) |range| {
             try diagnostics.append(.{
-                .range = .{
-                    .start = .{
-                        .line = 0,
-                        .character = 0,
-                    },
-                    .end = .{
-                        .line = 0,
-                        .character = 0,
-                    },
-                },
+                .range = range,
                 .severity = 1,
                 .source = "censor-lsp",
                 .message = "Error Found!",
@@ -76,7 +62,7 @@ pub const State = struct {
         return diagnostics;
     }
 
-    pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Request.Hover.Params.Position) !lsp.Response.Hover {
+    pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Position) !lsp.Response.Hover {
         _ = pos;
         const buf = try std.fmt.allocPrint(self.allocator, "File: {s} Size: {}", .{ uri, self.documents.get(uri).?.data.len });
         return lsp.Response.Hover.init(id, buf);

@@ -26,11 +26,6 @@ pub const Request = struct {
         pub const Params = struct {
             textDocument: TextDocumentIdentifier,
             position: Position,
-
-            pub const Position = struct {
-                line: i32,
-                character: i32,
-            };
         };
     };
     pub const CodeAction = struct {
@@ -175,13 +170,13 @@ const TextDocumentIdentifier = struct {
     uri: []u8,
 };
 
-const Range = struct {
+pub const Range = struct {
     start: Position,
     end: Position,
-    const Position = struct {
-        line: i32,
-        character: i32,
-    };
+};
+pub const Position = struct {
+    line: usize,
+    character: usize,
 };
 
 pub const TextEdit = struct {
