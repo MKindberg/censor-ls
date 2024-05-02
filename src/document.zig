@@ -22,6 +22,28 @@ pub const Document = struct {
         std.mem.copyForwards(u8, self.data, content);
     }
 
+    fn idxToPos(self: Document, idx: usize) ?lsp.Position {
+        if (idx > self.data.len) {
+            return null;
+        }
+        const line = std.mem.count(u8, self.data[0..idx], "\n");
+        if (line == 0) {
+            return .{ .line = 0, .character = idx };
+        }
+        const col = idx - (std.mem.lastIndexOf(u8, self.data[0..idx], "\n") orelse 0) - 1;
+        return .{ .line = line, .character = col };
+    }
+
+    fn posToIdx(self: Document, pos: lsp.Position) ?usize {
+        var offset: usize = 0;
+        var i: usize = 0;
+        while (i < pos.line) : (i += 1) {
+            if (std.mem.indexOf(u8, self.data[offset..], "\n")) |idx| {
+                offset += idx + 1;
+            } else return null;
+        }
+        return offset + pos.character;
+    }
     pub fn find(self: Document, pattern: []const u8) !std.ArrayList(lsp.Range) {
         var hits = std.ArrayList(lsp.Range).init(self.allocator);
         errdefer hits.deinit();
@@ -33,21 +55,32 @@ pub const Document = struct {
             const idx = i + offset;
             const end_idx = idx + pattern.len;
             offset = end_idx;
-            const start_line = std.mem.count(u8, self.data[0..idx], "\n");
-            const start_col = if (std.mem.lastIndexOf(u8, self.data[0..idx], "\n")) |n| idx - n - 1 else idx;
-            const end_line = start_line + std.mem.count(u8, pattern, "\n");
-            const end_col = end_idx - (std.mem.lastIndexOf(u8, self.data[0..end_idx], "\n") orelse 0);
+            const start_pos = self.idxToPos(idx).?;
+            const end_pos = self.idxToPos(end_idx).?;
             try hits.append(lsp.Range{
-                .start = lsp.Position{
-                    .line = start_line,
-                    .character = start_col,
-                },
-                .end = lsp.Position{
-                    .line = end_line,
-                    .character = end_col,
-                },
+                .start = start_pos,
+                .end = end_pos,
             });
         }
         return hits;
+    }
+
+    pub fn findInRange(self: Document, range: lsp.Range, pattern: []const u8) ?lsp.Range {
+        var start_idx = self.posToIdx(range.start).?;
+        start_idx -= @min(start_idx, pattern.len);
+
+        var end_idx = self.posToIdx(range.end).?;
+        end_idx = @min(self.data.len, end_idx + pattern.len);
+
+        if (std.mem.indexOf(u8, self.data[start_idx..end_idx], pattern)) |i| {
+            const idx = i + start_idx;
+            const start_pos = self.idxToPos(idx).?;
+            const end_pos = self.idxToPos(idx + pattern.len).?;
+            return .{
+                .start = start_pos,
+                .end = end_pos,
+            };
+        }
+        return null;
     }
 };

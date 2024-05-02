@@ -154,20 +154,21 @@ fn handleCodeAction(allocator: std.mem.Allocator, state: *State, logger: Logger,
     defer parsed.deinit();
 
     const uri = parsed.value.params.textDocument.uri;
-    var range = parsed.value.params.range;
-    range.end.character += 2;
+    const in_range = parsed.value.params.range;
 
-    const edit: [1]lsp.TextEdit = .{.{ .range = range, .newText = "<redacted>" }};
+    const doc = state.documents.get(uri).?;
+    if (doc.findInRange(in_range, "error")) |range| {
+        const edit: [1]lsp.TextEdit = .{.{ .range = range, .newText = "<redacted>" }};
 
-    logger.log("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, range.start.line, range.start.character, range.end.line, range.end.character });
-    var change = std.json.ArrayHashMap([]const lsp.TextEdit){};
-    defer change.deinit(allocator);
-    try change.map.put(allocator, uri, edit[0..]);
+        logger.log("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, range.start.line, range.start.character, range.end.line, range.end.character });
+        var change = std.json.ArrayHashMap([]const lsp.TextEdit){};
+        defer change.deinit(allocator);
+        try change.map.put(allocator, uri, edit[0..]);
 
-    const action: [1]lsp.Response.CodeAction.Result = .{.{ .title = "Censor", .edit = .{ .changes = change } }};
+        const action: [1]lsp.Response.CodeAction.Result = .{.{ .title = "Censor", .edit = .{ .changes = change } }};
 
-    const response = lsp.Response.CodeAction{ .id = parsed.value.id, .result = action[0..] };
+        const response = lsp.Response.CodeAction{ .id = parsed.value.id, .result = action[0..] };
 
-    try writeResponse(allocator, logger, response);
-    _ = state;
+        try writeResponse(allocator, logger, response);
+    }
 }
