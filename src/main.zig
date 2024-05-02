@@ -3,20 +3,32 @@ const rpc = @import("rpc.zig");
 const lsp = @import("lsp.zig");
 const Reader = @import("reader.zig").Reader;
 const State = @import("analysis.zig").State;
+const Config = @import("config.zig").Config;
 
 const Logger = @import("logger.zig").Logger;
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+
+    const stdin = std.io.getStdIn().reader();
+
     const home = std.posix.getenv("HOME").?;
     var buf: [256]u8 = undefined;
     const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/censor-lsp/log.txt", .{home});
     const logger = try Logger.init(log_path);
     defer logger.deinit();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    const config_path = try std.fmt.bufPrint(&buf, "{s}/.config/censor-lsp/config.json", .{home});
+    const config_file = try std.fs.cwd().openFile(config_path, .{});
+    defer config_file.close();
 
-    const stdin = std.io.getStdIn().reader();
+    const config_data = try config_file.readToEndAlloc(allocator, 10000);
+    defer allocator.free(config_data);
+
+    const parsed_config = try std.json.parseFromSlice(Config, allocator, config_data, .{});
+    defer parsed_config.deinit();
+    const config = parsed_config.value;
 
     var reader = Reader.init(allocator, stdin);
     defer reader.deinit();
@@ -51,7 +63,7 @@ pub fn main() !void {
             logger.log("Failed to decode message: {any}\n", .{e});
             continue;
         };
-        try handleMessage(allocator, &state, logger, decoded);
+        try handleMessage(allocator, logger, config, &state, decoded);
     }
 }
 
@@ -64,7 +76,7 @@ fn writeResponse(allocator: std.mem.Allocator, logger: Logger, msg: anytype) !vo
     logger.log("Sent response", .{});
 }
 
-fn handleMessage(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: rpc.DecodedMessage) !void {
+fn handleMessage(allocator: std.mem.Allocator, logger: Logger, config: Config, state: *State, msg: rpc.DecodedMessage) !void {
     logger.log("Received request: {s}", .{msg.method.toString()});
 
     switch (msg.method) {
@@ -73,16 +85,16 @@ fn handleMessage(allocator: std.mem.Allocator, state: *State, logger: Logger, ms
         },
         rpc.MethodType.Initialized => {},
         rpc.MethodType.TextDocument_DidOpen => {
-            try handleOpenDoc(allocator, state, logger, msg.content);
+            try handleOpenDoc(allocator, logger, config, state, msg.content);
         },
         rpc.MethodType.TextDocument_DidChange => {
-            try handleChangeDoc(allocator, state, logger, msg.content);
+            try handleChangeDoc(allocator, logger, config, state, msg.content);
         },
         rpc.MethodType.TextDocument_Hover => {
-            try handleHover(allocator, state, logger, msg.content);
+            try handleHover(allocator, logger, config, state, msg.content);
         },
         rpc.MethodType.TextDocument_CodeAction => {
-            try handleCodeAction(allocator, state, logger, msg.content);
+            try handleCodeAction(allocator, logger, config, state, msg.content);
         },
     }
 }
@@ -100,13 +112,15 @@ fn handleInitialize(allocator: std.mem.Allocator, logger: Logger, msg: []const u
     try writeResponse(allocator, logger, response_msg);
 }
 
-fn handleOpenDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: []const u8) !void {
+fn handleOpenDoc(allocator: std.mem.Allocator, logger: Logger, config: Config, state: *State, msg: []const u8) !void {
     const parsed = try std.json.parseFromSlice(lsp.Notification.DidOpenTextDocument, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     const doc = parsed.value.params.textDocument;
     logger.log("Opened {s}\n{s}", .{ doc.uri, doc.text });
-    const diagnostics = try state.openDocument(doc.uri, doc.text);
+    try state.openDocument(doc.uri, doc.text);
+
+    const diagnostics = try state.findDiagnostics(config, doc.uri);
     defer diagnostics.deinit();
 
     try writeResponse(allocator, logger, lsp.Notification.PublishDiagnostics{
@@ -118,13 +132,15 @@ fn handleOpenDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, ms
     });
 }
 
-fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: []const u8) !void {
+fn handleChangeDoc(allocator: std.mem.Allocator, logger: Logger, config: Config, state: *State, msg: []const u8) !void {
     const parsed = try std.json.parseFromSlice(lsp.Notification.DidChangeTextDocument, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     const doc_params = parsed.value.params;
     logger.log("Changed {s}\n{s}", .{ doc_params.textDocument.uri, doc_params.contentChanges[0].text });
-    const diagnostics = try state.updateDocument(doc_params.textDocument.uri, doc_params.contentChanges[0].text);
+    try state.updateDocument(doc_params.textDocument.uri, doc_params.contentChanges[0].text);
+
+    const diagnostics = try state.findDiagnostics(config, doc_params.textDocument.uri);
     defer diagnostics.deinit();
 
     try writeResponse(allocator, logger, lsp.Notification.PublishDiagnostics{
@@ -136,20 +152,20 @@ fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, logger: Logger, 
     });
 }
 
-fn handleHover(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: []const u8) !void {
+fn handleHover(allocator: std.mem.Allocator, logger: Logger, config: Config, state: *State, msg: []const u8) !void {
     const parsed = try std.json.parseFromSlice(lsp.Request.Hover, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     const request = parsed.value;
 
-    const response = try state.hover(request.id, request.params.textDocument.uri, request.params.position);
-    defer state.free(response.result.contents);
-    try writeResponse(allocator, logger, response);
+    if (state.hover(config, request.id, request.params.textDocument.uri, request.params.position)) |response| {
+        try writeResponse(allocator, logger, response);
 
-    logger.log("Sent Hover response", .{});
+        logger.log("Sent Hover response", .{});
+    }
 }
 
-fn handleCodeAction(allocator: std.mem.Allocator, state: *State, logger: Logger, msg: []const u8) !void {
+fn handleCodeAction(allocator: std.mem.Allocator, logger: Logger, config: Config, state: *State, msg: []const u8) !void {
     const parsed = try std.json.parseFromSlice(lsp.Request.CodeAction, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
@@ -157,18 +173,23 @@ fn handleCodeAction(allocator: std.mem.Allocator, state: *State, logger: Logger,
     const in_range = parsed.value.params.range;
 
     const doc = state.documents.get(uri).?;
-    if (doc.findInRange(in_range, "error")) |range| {
-        const edit: [1]lsp.TextEdit = .{.{ .range = range, .newText = "<redacted>" }};
+    for (config.items) |item| {
+        if (item.replacement) |replacement| {
+            if (doc.findInRange(in_range, item.text)) |range| {
+                const edit: [1]lsp.TextEdit = .{.{ .range = range, .newText = replacement }};
 
-        logger.log("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, range.start.line, range.start.character, range.end.line, range.end.character });
-        var change = std.json.ArrayHashMap([]const lsp.TextEdit){};
-        defer change.deinit(allocator);
-        try change.map.put(allocator, uri, edit[0..]);
+                logger.log("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, range.start.line, range.start.character, range.end.line, range.end.character });
+                var change = std.json.ArrayHashMap([]const lsp.TextEdit){};
+                defer change.deinit(allocator);
+                try change.map.put(allocator, uri, edit[0..]);
 
-        const action: [1]lsp.Response.CodeAction.Result = .{.{ .title = "Censor", .edit = .{ .changes = change } }};
+                const action: [1]lsp.Response.CodeAction.Result = .{.{ .title = "Censor", .edit = .{ .changes = change } }};
 
-        const response = lsp.Response.CodeAction{ .id = parsed.value.id, .result = action[0..] };
+                const response = lsp.Response.CodeAction{ .id = parsed.value.id, .result = action[0..] };
 
-        try writeResponse(allocator, logger, response);
+                try writeResponse(allocator, logger, response);
+                return;
+            }
+        }
     }
 }

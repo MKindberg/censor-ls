@@ -1,6 +1,7 @@
 const std = @import("std");
 const lsp = @import("lsp.zig");
 const Document = @import("document.zig").Document;
+const Config = @import("config.zig").Config;
 
 pub const State = struct {
     allocator: std.mem.Allocator,
@@ -21,51 +22,46 @@ pub const State = struct {
         self.documents.deinit();
     }
 
-    pub fn openDocument(self: *State, name: []u8, content: []const u8) !std.ArrayList(lsp.Diagnostic) {
+    pub fn openDocument(self: *State, name: []u8, content: []const u8) !void {
         const key = try self.allocator.alloc(u8, name.len);
         std.mem.copyForwards(u8, key, name);
         const doc = try Document.init(self.allocator, content);
         try self.documents.put(key, doc);
+    }
 
+    pub fn findDiagnostics(self: State, config: Config, uri: []u8) !std.ArrayList(lsp.Diagnostic) {
+        const doc = self.documents.get(uri).?;
         var diagnostics = std.ArrayList(lsp.Diagnostic).init(self.allocator);
         errdefer diagnostics.deinit();
 
-        const hits = try doc.find("error");
-        defer hits.deinit();
-        for (hits.items) |range| {
-            try diagnostics.append(.{
-                .range = range,
-                .severity = 1,
-                .source = "censor-lsp",
-                .message = "Error Found!",
-            });
+        for (config.items) |item| {
+            const hits = try doc.find(item.text);
+            defer hits.deinit();
+            for (hits.items) |range| {
+                try diagnostics.append(.{
+                    .range = range,
+                    .severity = @intFromEnum(item.severity),
+                    .source = "censor-lsp",
+                    .message = item.message,
+                });
+            }
         }
         return diagnostics;
     }
 
-    pub fn updateDocument(self: *State, name: []u8, content: []const u8) !std.ArrayList(lsp.Diagnostic) {
+    pub fn updateDocument(self: *State, name: []u8, content: []const u8) !void {
         var doc = self.documents.getPtr(name).?;
         try doc.update(content);
-
-        var diagnostics = std.ArrayList(lsp.Diagnostic).init(self.allocator);
-        errdefer diagnostics.deinit();
-        const hits = try doc.find("error");
-        defer hits.deinit();
-        for (hits.items) |range| {
-            try diagnostics.append(.{
-                .range = range,
-                .severity = 1,
-                .source = "censor-lsp",
-                .message = "Error Found!",
-            });
-        }
-        return diagnostics;
     }
 
-    pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Position) !lsp.Response.Hover {
-        _ = pos;
-        const buf = try std.fmt.allocPrint(self.allocator, "File: {s} Size: {}", .{ uri, self.documents.get(uri).?.data.len });
-        return lsp.Response.Hover.init(id, buf);
+    pub fn hover(self: *State, config: Config, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {
+        const doc = self.documents.get(uri).?;
+        for (config.items) |item| {
+            if (doc.findInRange(.{ .start = pos, .end = pos }, item.text) != null) {
+                return lsp.Response.Hover.init(id, item.message);
+            }
+        }
+        return null;
     }
     pub fn free(self: *State, buf: []const u8) void {
         self.allocator.free(buf);
