@@ -41,7 +41,7 @@ pub const State = struct {
                 try diagnostics.append(.{
                     .range = range,
                     .severity = @intFromEnum(item.severity),
-                    .source = "censor-lsp",
+                    .source = "censor-ls",
                     .message = item.message,
                 });
             }

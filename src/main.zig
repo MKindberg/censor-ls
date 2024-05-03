@@ -15,11 +15,11 @@ pub fn main() !void {
 
     const home = std.posix.getenv("HOME").?;
     var buf: [256]u8 = undefined;
-    const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/censor-lsp/log.txt", .{home});
+    const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/censor-ls/log.txt", .{home});
     const logger = try Logger.init(log_path);
     defer logger.deinit();
 
-    const config_path = try std.fmt.bufPrint(&buf, "{s}/.config/censor-lsp/config.json", .{home});
+    const config_path = try std.fmt.bufPrint(&buf, "{s}/.config/censor-ls/config.json", .{home});
     const config_file = try std.fs.cwd().openFile(config_path, .{});
     defer config_file.close();
 

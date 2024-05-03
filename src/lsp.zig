@@ -75,7 +75,7 @@ pub const Response = struct {
                         .codeActionProvider = true,
                     },
                     .serverInfo = .{
-                        .name = "censor-lsp",
+                        .name = "censor-ls",
                         .version = "0.1",
                     },
                 },
