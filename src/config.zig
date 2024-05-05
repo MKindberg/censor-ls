@@ -9,20 +9,16 @@ pub const Config = struct {
         const inner = std.ArrayList(Item).init(allocator);
         var self = Config{ .items = inner.items, .inner = inner };
 
-        var rel_buf: [256]u8 = undefined;
-        var buf_alloc = std.heap.FixedBufferAllocator.init(&rel_buf);
-        var abs_buf: [std.posix.PATH_MAX]u8 = undefined;
+        var path_buf: [std.posix.PATH_MAX]u8 = undefined;
         var file_buf: [std.posix.PATH_MAX]u8 = undefined;
+        var path: []const u8 = try std.fs.cwd().realpath(".", &path_buf);
+        var file = try std.fmt.bufPrint(&file_buf, "{s}/.censor.json", .{path});
+        if (std.fs.cwd().access(file, .{}) != std.posix.AccessError.FileNotFound) {
+            try self.parseFile(allocator, file);
+        }
 
-        var rel = std.ArrayList(u8).init(buf_alloc.allocator());
-        try rel.appendSlice(".");
-        var path = try std.fs.cwd().realpath(rel.items, &abs_buf);
-
-        while (!std.mem.eql(u8, path, "/")) : ({
-            try rel.appendSlice("/..");
-            path = try std.fs.cwd().realpath(rel.items, &abs_buf);
-        }) {
-            const file = try std.fmt.bufPrint(&file_buf, "{s}/.censor.json", .{path});
+        while (std.fs.path.dirname(path)) |p| : (path = p) {
+            file = try std.fmt.bufPrint(&file_buf, "{s}/.censor.json", .{path});
             std.fs.cwd().access(file, .{}) catch continue;
             try self.parseFile(allocator, file);
         }
