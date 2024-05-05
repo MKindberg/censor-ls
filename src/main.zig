@@ -19,16 +19,8 @@ pub fn main() !void {
     const logger = try Logger.init(log_path);
     defer logger.deinit();
 
-    const config_path = try std.fmt.bufPrint(&buf, "{s}/.config/censor-ls/config.json", .{home});
-    const config_file = try std.fs.cwd().openFile(config_path, .{});
-    defer config_file.close();
-
-    const config_data = try config_file.readToEndAlloc(allocator, 10000);
-    defer allocator.free(config_data);
-
-    const parsed_config = try std.json.parseFromSlice(Config, allocator, config_data, .{});
-    defer parsed_config.deinit();
-    const config = parsed_config.value;
+    const config = try Config.init(allocator);
+    defer config.deinit();
 
     var reader = Reader.init(allocator, stdin);
     defer reader.deinit();
