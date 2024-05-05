@@ -119,5 +119,5 @@ test "config" {
     var config = Config{ .items = inner.items, .inner = inner };
     defer config.deinit();
     try config.parse(std.testing.allocator, str);
-    std.debug.print("parsed: {any}\n", .{config.items.len});
+    try std.testing.expectEqual(config.items.len, 1);
 }

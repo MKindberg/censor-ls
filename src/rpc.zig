@@ -64,10 +64,12 @@ pub const DecodedMessage = struct {
     content: []const u8,
 };
 
-pub fn decodeMessage(allocator: std.mem.Allocator, logger: Logger, msg: []const u8) !DecodedMessage {
+pub fn decodeMessage(allocator: std.mem.Allocator, logger: ?Logger, msg: []const u8) !DecodedMessage {
     const parsed = try std.json.parseFromSlice(BaseMessage, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
-    logger.log("{s}", .{parsed.value.method});
+    if (logger) |l| {
+        l.log("{s}", .{parsed.value.method});
+    }
     const method_type = try MethodType.fromString(parsed.value.method);
     return .{ .method = method_type, .content = msg };
 }
@@ -84,7 +86,7 @@ test "encodeMessage" {
 }
 
 test "decodeMessage" {
-    const msg = "Content-Length: 20\r\n\r\n{\"method\":\"init\",\"y\":37}";
-    const message = try decodeMessage(std.testing.allocator, msg[0..]);
+    const msg = "{\"method\":\"initialize\",\"y\":37}";
+    const message = try decodeMessage(std.testing.allocator, null, msg[0..]);
     try std.testing.expectEqual(message.method, MethodType.Initialize);
 }
