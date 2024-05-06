@@ -3,7 +3,6 @@ const rpc = @import("rpc.zig");
 const lsp = @import("lsp.zig");
 const Reader = @import("reader.zig").Reader;
 const State = @import("analysis.zig").State;
-const Config = @import("config.zig").Config;
 
 const Logger = @import("logger.zig").Logger;
 
@@ -24,9 +23,6 @@ pub fn main() !void {
     const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/censor-ls/log.txt", .{home});
     try Logger.init(log_path);
     defer Logger.deinit();
-
-    const config = try Config.init(allocator);
-    defer config.deinit();
 
     var reader = Reader.init(allocator, stdin);
     defer reader.deinit();
@@ -61,7 +57,7 @@ pub fn main() !void {
             std.log.info("Failed to decode message: {any}\n", .{e});
             continue;
         };
-        try handleMessage(allocator, config, &state, decoded);
+        try handleMessage(allocator, &state, decoded);
     }
 }
 
@@ -74,7 +70,7 @@ fn writeResponse(allocator: std.mem.Allocator, msg: anytype) !void {
     std.log.info("Sent response", .{});
 }
 
-fn handleMessage(allocator: std.mem.Allocator, config: Config, state: *State, msg: rpc.DecodedMessage) !void {
+fn handleMessage(allocator: std.mem.Allocator, state: *State, msg: rpc.DecodedMessage) !void {
     std.log.info("Received request: {s}", .{msg.method.toString()});
 
     switch (msg.method) {
@@ -83,16 +79,16 @@ fn handleMessage(allocator: std.mem.Allocator, config: Config, state: *State, ms
         },
         rpc.MethodType.Initialized => {},
         rpc.MethodType.TextDocument_DidOpen => {
-            try handleOpenDoc(allocator, config, state, msg.content);
+            try handleOpenDoc(allocator, state, msg.content);
         },
         rpc.MethodType.TextDocument_DidChange => {
-            try handleChangeDoc(allocator, config, state, msg.content);
+            try handleChangeDoc(allocator, state, msg.content);
         },
         rpc.MethodType.TextDocument_Hover => {
-            try handleHover(allocator, config, state, msg.content);
+            try handleHover(allocator, state, msg.content);
         },
         rpc.MethodType.TextDocument_CodeAction => {
-            try handleCodeAction(allocator, config, state, msg.content);
+            try handleCodeAction(allocator, state, msg.content);
         },
     }
 }
@@ -110,7 +106,7 @@ fn handleInitialize(allocator: std.mem.Allocator, msg: []const u8) !void {
     try writeResponse(allocator, response_msg);
 }
 
-fn handleOpenDoc(allocator: std.mem.Allocator, config: Config, state: *State, msg: []const u8) !void {
+fn handleOpenDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8) !void {
     const parsed = try std.json.parseFromSlice(lsp.Notification.DidOpenTextDocument, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
@@ -118,7 +114,7 @@ fn handleOpenDoc(allocator: std.mem.Allocator, config: Config, state: *State, ms
     std.log.info("Opened {s}\n{s}", .{ doc.uri, doc.text });
     try state.openDocument(doc.uri, doc.text);
 
-    const diagnostics = try state.findDiagnostics(config, doc.uri);
+    const diagnostics = try state.findDiagnostics(doc.uri);
     defer diagnostics.deinit();
 
     try writeResponse(allocator, lsp.Notification.PublishDiagnostics{
@@ -130,7 +126,7 @@ fn handleOpenDoc(allocator: std.mem.Allocator, config: Config, state: *State, ms
     });
 }
 
-fn handleChangeDoc(allocator: std.mem.Allocator, config: Config, state: *State, msg: []const u8) !void {
+fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8) !void {
     const parsed = try std.json.parseFromSlice(lsp.Notification.DidChangeTextDocument, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
@@ -138,7 +134,7 @@ fn handleChangeDoc(allocator: std.mem.Allocator, config: Config, state: *State, 
     std.log.info("Changed {s}\n{s}", .{ doc_params.textDocument.uri, doc_params.contentChanges[0].text });
     try state.updateDocument(doc_params.textDocument.uri, doc_params.contentChanges[0].text);
 
-    const diagnostics = try state.findDiagnostics(config, doc_params.textDocument.uri);
+    const diagnostics = try state.findDiagnostics(doc_params.textDocument.uri);
     defer diagnostics.deinit();
 
     try writeResponse(allocator, lsp.Notification.PublishDiagnostics{
@@ -150,20 +146,20 @@ fn handleChangeDoc(allocator: std.mem.Allocator, config: Config, state: *State, 
     });
 }
 
-fn handleHover(allocator: std.mem.Allocator, config: Config, state: *State, msg: []const u8) !void {
+fn handleHover(allocator: std.mem.Allocator, state: *State, msg: []const u8) !void {
     const parsed = try std.json.parseFromSlice(lsp.Request.Hover, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
     const request = parsed.value;
 
-    if (state.hover(config, request.id, request.params.textDocument.uri, request.params.position)) |response| {
+    if (state.hover(request.id, request.params.textDocument.uri, request.params.position)) |response| {
         try writeResponse(allocator, response);
 
         std.log.info("Sent Hover response", .{});
     }
 }
 
-fn handleCodeAction(allocator: std.mem.Allocator, config: Config, state: *State, msg: []const u8) !void {
+fn handleCodeAction(allocator: std.mem.Allocator, state: *State, msg: []const u8) !void {
     const parsed = try std.json.parseFromSlice(lsp.Request.CodeAction, allocator, msg, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
@@ -171,9 +167,9 @@ fn handleCodeAction(allocator: std.mem.Allocator, config: Config, state: *State,
     const in_range = parsed.value.params.range;
 
     const doc = state.documents.get(uri).?;
-    for (config.items) |item| {
+    for (doc.config.items) |item| {
         if (item.replacement) |replacement| {
-            if (doc.findInRange(in_range, item.text)) |range| {
+            if (doc.doc.findInRange(in_range, item.text)) |range| {
                 const edit: [1]lsp.TextEdit = .{.{ .range = range, .newText = replacement }};
 
                 std.log.info("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, range.start.line, range.start.character, range.end.line, range.end.character });
