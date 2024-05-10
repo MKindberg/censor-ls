@@ -70,7 +70,7 @@ pub const Response = struct {
                 .id = id,
                 .result = .{
                     .capabilities = .{
-                        .textDocumentSync = 1,
+                        .textDocumentSync = 2,
                         .hoverProvider = true,
                         .codeActionProvider = true,
                     },
@@ -145,6 +145,7 @@ pub const Notification = struct {
         };
 
         const ChangeEvent = struct {
+            range: Range,
             text: []u8,
         };
     };

@@ -17,9 +17,22 @@ pub const Document = struct {
         self.allocator.free(self.data);
     }
 
-    pub fn update(self: *Document, content: []const u8) !void {
-        self.data = try self.allocator.realloc(self.data, content.len);
-        std.mem.copyForwards(u8, self.data, content);
+    pub fn update(self: *Document, text: []const u8, range: lsp.Range) !void {
+        const range_start = self.posToIdx(range.start) orelse self.data.len;
+        const range_end = self.posToIdx(range.end) orelse self.data.len;
+        const range_len = range_end - range_start;
+        if (range_len > text.len) {
+            std.mem.copyForwards(u8, self.data[range_start..], text);
+            std.mem.copyForwards(u8, self.data[range_start + text.len ..], self.data[range_end..]);
+            self.data = try self.allocator.realloc(self.data, self.data.len - (range_len - text.len));
+        } else if (range_len < text.len) {
+            const old_len = self.data.len;
+            self.data = try self.allocator.realloc(self.data, self.data.len + (text.len - range_len));
+            std.mem.copyBackwards(u8, self.data[range_end + (text.len - range_len) ..], self.data[range_end..old_len]);
+            std.mem.copyForwards(u8, self.data[range_start..], text);
+        } else {
+            std.mem.copyForwards(u8, self.data[range_start..range_end], text);
+        }
     }
 
     fn idxToPos(self: Document, idx: usize) ?lsp.Position {
@@ -84,3 +97,83 @@ pub const Document = struct {
         return null;
     }
 };
+
+test "addText" {
+    const allocator = std.testing.allocator;
+    var doc = try Document.init(allocator, "hello world");
+    defer doc.deinit();
+
+    try doc.update(",", .{
+        .start = .{ .line = 0, .character = 5 },
+        .end = .{ .line = 0, .character = 5 },
+    });
+    try std.testing.expectEqualStrings("hello, world", doc.data);
+}
+
+test "addTextAtEnd" {
+    const allocator = std.testing.allocator;
+    var doc = try Document.init(allocator, "hello world");
+    defer doc.deinit();
+
+    try doc.update("!", .{
+        .start = .{ .line = 0, .character = 11 },
+        .end = .{ .line = 0, .character = 11 },
+    });
+    try std.testing.expectEqualStrings("hello world!", doc.data);
+}
+
+test "addTextAtStart" {
+    const allocator = std.testing.allocator;
+    var doc = try Document.init(allocator, "ello world");
+    defer doc.deinit();
+
+    try doc.update("H", .{
+        .start = .{ .line = 0, .character = 0 },
+        .end = .{ .line = 0, .character = 0 },
+    });
+    try std.testing.expectEqualStrings("Hello world", doc.data);
+}
+
+test "ChangeText" {
+    const allocator = std.testing.allocator;
+    var doc = try Document.init(allocator, "hello world");
+    defer doc.deinit();
+    try doc.update("H", .{
+        .start = .{ .line = 0, .character = 0 },
+        .end = .{ .line = 0, .character = 1 },
+    });
+    try std.testing.expectEqualStrings("Hello world", doc.data);
+}
+
+test "RemoveText" {
+    const allocator = std.testing.allocator;
+    var doc = try Document.init(allocator, "Hello world");
+    defer doc.deinit();
+    try doc.update("", .{
+        .start = .{ .line = 0, .character = 5 },
+        .end = .{ .line = 0, .character = 6 },
+    });
+    try std.testing.expectEqualStrings("Helloworld", doc.data);
+}
+
+test "RemoveTextAtStart" {
+    const allocator = std.testing.allocator;
+    var doc = try Document.init(allocator, "Hello world");
+    defer doc.deinit();
+    try doc.update("", .{
+        .start = .{ .line = 0, .character = 0 },
+        .end = .{ .line = 0, .character = 1 },
+    });
+    try std.testing.expectEqualStrings("ello world", doc.data);
+}
+
+test "RemoveTextAtEnd" {
+    const allocator = std.testing.allocator;
+    var doc = try Document.init(allocator, "Hello world");
+    defer doc.deinit();
+    try doc.update("", .{
+        .start = .{ .line = 0, .character = 10 },
+        .end = .{ .line = 0, .character = 11 },
+    });
+    try std.testing.expectEqualStrings("Hello worl", doc.data);
+}

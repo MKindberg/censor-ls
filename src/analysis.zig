@@ -49,9 +49,9 @@ pub const State = struct {
         return diagnostics;
     }
 
-    pub fn updateDocument(self: *State, name: []u8, content: []const u8) !void {
+    pub fn updateDocument(self: *State, name: []u8, text: []const u8, range: lsp.Range) !void {
         var doc = self.documents.getPtr(name).?;
-        try doc.doc.update(content);
+        try doc.doc.update(text, range);
     }
 
     pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {

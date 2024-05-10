@@ -131,8 +131,12 @@ fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8)
     defer parsed.deinit();
 
     const doc_params = parsed.value.params;
-    std.log.info("Changed {s}\n{s}", .{ doc_params.textDocument.uri, doc_params.contentChanges[0].text });
-    try state.updateDocument(doc_params.textDocument.uri, doc_params.contentChanges[0].text);
+
+    for (doc_params.contentChanges) |change| {
+        try state.updateDocument(doc_params.textDocument.uri, change.text, change.range);
+    }
+
+    std.log.info("Updated document {s}", .{state.documents.get(doc_params.textDocument.uri).?.doc.data});
 
     const diagnostics = try state.findDiagnostics(doc_params.textDocument.uri);
     defer diagnostics.deinit();
