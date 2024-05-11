@@ -26,6 +26,8 @@ pub const MethodType = enum {
     TextDocument_DidClose,
     TextDocument_Hover,
     TextDocument_CodeAction,
+    Shutdown,
+    Exit,
 
     pub fn toString(self: MethodType) []const u8 {
         switch (self) {
@@ -36,6 +38,8 @@ pub const MethodType = enum {
             .TextDocument_DidClose => return "textDocument/didClose",
             .TextDocument_Hover => return "textDocument/hover",
             .TextDocument_CodeAction => return "textDocument/codeAction",
+            .Shutdown => return "shutdown",
+            .Exit => return "exit",
         }
     }
     pub fn fromString(s: []const u8) !MethodType {
@@ -53,6 +57,10 @@ pub const MethodType = enum {
             return MethodType.TextDocument_CodeAction;
         } else if (std.mem.eql(u8, s, "textDocument/didClose")) {
             return MethodType.TextDocument_DidClose;
+        } else if (std.mem.eql(u8, s, "shutdown")) {
+            return MethodType.Shutdown;
+        } else if (std.mem.eql(u8, s, "exit")) {
+            return MethodType.Exit;
         }
         return DecodeError.UnknownMethod;
     }

@@ -1,6 +1,11 @@
 const std = @import("std");
 
 pub const Request = struct {
+    pub const Request = struct {
+        jsonrpc: []const u8 = "2.0",
+        id: i32,
+        method: []u8,
+    };
     pub const Initialize = struct {
         jsonrpc: []const u8 = "2.0",
         id: i32,
@@ -41,6 +46,12 @@ pub const Request = struct {
 
             const CodeActionContext = struct {};
         };
+    };
+
+    pub const Shutdown = struct {
+        jsonrpc: []const u8 = "2.0",
+        id: i32,
+        method: []u8,
     };
 };
 
@@ -116,6 +127,39 @@ pub const Response = struct {
             };
         };
     };
+
+    pub const Shutdown = struct {
+        jsonrpc: []const u8 = "2.0",
+        id: i32,
+        result: void,
+
+        const Self = @This();
+        pub fn init(request: Request.Shutdown) Self {
+            return Self{
+                .jsonrpc = "2.0",
+                .id = request.id,
+                .result = {},
+            };
+        }
+    };
+
+    pub const Error = struct {
+        jsonrpc: []const u8 = "2.0",
+        id: i32,
+        @"error": ErrorData,
+
+        const Self = @This();
+        pub fn init(id: i32, code: ErrorCode, message: []const u8) Self {
+            return Self{
+                .jsonrpc = "2.0",
+                .id = id,
+                .@"error" = .{
+                    .code = @intFromEnum(code),
+                    .message = message,
+                },
+            };
+        }
+    };
 };
 
 pub const Notification = struct {
@@ -168,6 +212,11 @@ pub const Notification = struct {
             diagnostics: []const Diagnostic,
         };
     };
+
+    pub const Exit = struct {
+        jsonrpc: []const u8 = "2.0",
+        method: []u8,
+    };
 };
 
 const TextDocumentItem = struct {
@@ -200,4 +249,17 @@ pub const Diagnostic = struct {
     severity: i32,
     source: ?[]const u8,
     message: []const u8,
+};
+
+pub const ErrorData = struct {
+    code: i32,
+    message: []const u8,
+};
+
+pub const ErrorCode = enum(i32) {
+    ParseError = -32700,
+    InvalidRequest = -32600,
+    MethodNotFound = -32601,
+    InvalidParams = -32602,
+    InternalError = -32603,
 };

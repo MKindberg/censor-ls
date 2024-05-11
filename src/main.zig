@@ -11,7 +11,13 @@ pub const std_options = .{
     .logFn = Logger.log,
 };
 
-pub fn main() !void {
+pub const RunState = enum {
+    Run,
+    ShutdownOk,
+    ShutdownErr,
+};
+
+pub fn main() !u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
@@ -34,7 +40,9 @@ pub fn main() !void {
     defer header.deinit();
     var content = std.ArrayList(u8).init(allocator);
     defer content.deinit();
-    while (true) {
+
+    var run_state = RunState.Run;
+    while (run_state == RunState.Run) {
         std.log.info("Waiting for header", .{});
         _ = try reader.readUntilDelimiterOrEof(header.writer(), "\r\n\r\n");
 
@@ -57,8 +65,9 @@ pub fn main() !void {
             std.log.info("Failed to decode message: {any}\n", .{e});
             continue;
         };
-        try handleMessage(allocator, &state, decoded);
+        run_state = try handleMessage(allocator, &state, decoded);
     }
+    return @intFromBool(run_state == RunState.ShutdownOk);
 }
 
 fn writeResponse(allocator: std.mem.Allocator, msg: anytype) !void {
@@ -70,9 +79,16 @@ fn writeResponse(allocator: std.mem.Allocator, msg: anytype) !void {
     std.log.info("Sent response", .{});
 }
 
-fn handleMessage(allocator: std.mem.Allocator, state: *State, msg: rpc.DecodedMessage) !void {
+fn handleMessage(allocator: std.mem.Allocator, state: *State, msg: rpc.DecodedMessage) !RunState {
+    const local_state = struct {
+        var shutdown = false;
+    };
+
     std.log.info("Received request: {s}", .{msg.method.toString()});
 
+    if (local_state.shutdown and msg.method != rpc.MethodType.Exit) {
+        return try handleShutingDown(allocator, msg.method, msg.content);
+    }
     switch (msg.method) {
         rpc.MethodType.Initialize => {
             try handleInitialize(allocator, msg.content);
@@ -93,7 +109,15 @@ fn handleMessage(allocator: std.mem.Allocator, state: *State, msg: rpc.DecodedMe
         rpc.MethodType.TextDocument_CodeAction => {
             try handleCodeAction(allocator, state, msg.content);
         },
+        rpc.MethodType.Shutdown => {
+            try handleShutdown(allocator, msg.content);
+            local_state.shutdown = true;
+        },
+        rpc.MethodType.Exit => {
+            return RunState.ShutdownErr;
+        },
     }
+    return RunState.Run;
 }
 
 fn handleInitialize(allocator: std.mem.Allocator, msg: []const u8) !void {
@@ -201,4 +225,29 @@ fn handleCodeAction(allocator: std.mem.Allocator, state: *State, msg: []const u8
             }
         }
     }
+}
+
+fn handleShutdown(allocator: std.mem.Allocator, msg: []const u8) !void {
+    const parsed = try std.json.parseFromSlice(lsp.Request.Shutdown, allocator, msg, .{ .ignore_unknown_fields = true });
+    defer parsed.deinit();
+    const response = lsp.Response.Shutdown.init(parsed.value);
+    try writeResponse(allocator, response);
+}
+
+fn handleShutingDown(allocator: std.mem.Allocator, method_type: rpc.MethodType, msg: []const u8) !RunState {
+    if (method_type == rpc.MethodType.Exit) {
+        return RunState.ShutdownOk;
+    }
+
+    const parsed = std.json.parseFromSlice(lsp.Request.Request, allocator, msg, .{ .ignore_unknown_fields = true });
+
+    if (parsed) |request| {
+        const reply = lsp.Response.Error.init(request.value.id, lsp.ErrorCode.InvalidRequest, "Shutting down");
+        try writeResponse(allocator, reply);
+        request.deinit();
+    } else |err| if (err == error.UnknownField) {
+        const reply = lsp.Response.Error.init(0, lsp.ErrorCode.InvalidRequest, "Shutting down");
+        try writeResponse(allocator, reply);
+    }
+    return RunState.Run;
 }
