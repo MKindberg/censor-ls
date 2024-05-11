@@ -136,7 +136,7 @@ fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8)
         try state.updateDocument(doc_params.textDocument.uri, change.text, change.range);
     }
 
-    std.log.info("Updated document {s}", .{state.documents.get(doc_params.textDocument.uri).?.doc.data});
+    std.log.info("Updated document {s}", .{state.documents.get(doc_params.textDocument.uri).?.doc.text});
 
     const diagnostics = try state.findDiagnostics(doc_params.textDocument.uri);
     defer diagnostics.deinit();

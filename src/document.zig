@@ -3,13 +3,19 @@ const lsp = @import("lsp.zig");
 
 pub const Document = struct {
     allocator: std.mem.Allocator,
+    /// Slice pointing to the document's text.
+    text: []u8,
+    /// Slice pointing to the memory where the text is stored.
     data: []u8,
 
     pub fn init(allocator: std.mem.Allocator, content: []const u8) !Document {
-        const data = try allocator.dupe(u8, content);
+        const data = try allocator.alloc(u8, content.len + content.len / 3);
+        std.mem.copyForwards(u8, data, content);
+        const text = data[0..content.len];
         return Document{
             .allocator = allocator,
             .data = data,
+            .text = text,
         };
     }
 
@@ -18,32 +24,37 @@ pub const Document = struct {
     }
 
     pub fn update(self: *Document, text: []const u8, range: lsp.Range) !void {
-        const range_start = self.posToIdx(range.start) orelse self.data.len;
-        const range_end = self.posToIdx(range.end) orelse self.data.len;
+        const range_start = self.posToIdx(range.start) orelse self.text.len;
+        const range_end = self.posToIdx(range.end) orelse self.text.len;
         const range_len = range_end - range_start;
+        const new_len = self.text.len + text.len - range_len;
+        const old_len = self.text.len;
+        if (new_len > self.data.len) {
+            self.data = try self.allocator.realloc(self.data, new_len + new_len / 3);
+        }
+
         if (range_len > text.len) {
             std.mem.copyForwards(u8, self.data[range_start..], text);
             std.mem.copyForwards(u8, self.data[range_start + text.len ..], self.data[range_end..]);
-            self.data = try self.allocator.realloc(self.data, self.data.len - (range_len - text.len));
         } else if (range_len < text.len) {
-            const old_len = self.data.len;
-            self.data = try self.allocator.realloc(self.data, self.data.len + (text.len - range_len));
             std.mem.copyBackwards(u8, self.data[range_end + (text.len - range_len) ..], self.data[range_end..old_len]);
             std.mem.copyForwards(u8, self.data[range_start..], text);
         } else {
             std.mem.copyForwards(u8, self.data[range_start..range_end], text);
         }
+
+        self.text = self.data[0..new_len];
     }
 
     fn idxToPos(self: Document, idx: usize) ?lsp.Position {
-        if (idx > self.data.len) {
+        if (idx > self.text.len) {
             return null;
         }
-        const line = std.mem.count(u8, self.data[0..idx], "\n");
+        const line = std.mem.count(u8, self.text[0..idx], "\n");
         if (line == 0) {
             return .{ .line = 0, .character = idx };
         }
-        const col = idx - (std.mem.lastIndexOf(u8, self.data[0..idx], "\n") orelse 0) - 1;
+        const col = idx - (std.mem.lastIndexOf(u8, self.text[0..idx], "\n") orelse 0) - 1;
         return .{ .line = line, .character = col };
     }
 
@@ -51,7 +62,7 @@ pub const Document = struct {
         var offset: usize = 0;
         var i: usize = 0;
         while (i < pos.line) : (i += 1) {
-            if (std.mem.indexOf(u8, self.data[offset..], "\n")) |idx| {
+            if (std.mem.indexOf(u8, self.text[offset..], "\n")) |idx| {
                 offset += idx + 1;
             } else return null;
         }
@@ -64,7 +75,7 @@ pub const Document = struct {
             return hits;
         }
         var offset: usize = 0;
-        while (std.mem.indexOf(u8, self.data[offset..], pattern)) |i| {
+        while (std.mem.indexOf(u8, self.text[offset..], pattern)) |i| {
             const idx = i + offset;
             const end_idx = idx + pattern.len;
             offset = end_idx;
@@ -83,9 +94,9 @@ pub const Document = struct {
         start_idx -= @min(start_idx, pattern.len);
 
         var end_idx = self.posToIdx(range.end).?;
-        end_idx = @min(self.data.len, end_idx + pattern.len);
+        end_idx = @min(self.text.len, end_idx + pattern.len);
 
-        if (std.mem.indexOf(u8, self.data[start_idx..end_idx], pattern)) |i| {
+        if (std.mem.indexOf(u8, self.text[start_idx..end_idx], pattern)) |i| {
             const idx = i + start_idx;
             const start_pos = self.idxToPos(idx).?;
             const end_pos = self.idxToPos(idx + pattern.len).?;
@@ -107,7 +118,7 @@ test "addText" {
         .start = .{ .line = 0, .character = 5 },
         .end = .{ .line = 0, .character = 5 },
     });
-    try std.testing.expectEqualStrings("hello, world", doc.data);
+    try std.testing.expectEqualStrings("hello, world", doc.text);
 }
 
 test "addTextAtEnd" {
@@ -119,7 +130,7 @@ test "addTextAtEnd" {
         .start = .{ .line = 0, .character = 11 },
         .end = .{ .line = 0, .character = 11 },
     });
-    try std.testing.expectEqualStrings("hello world!", doc.data);
+    try std.testing.expectEqualStrings("hello world!", doc.text);
 }
 
 test "addTextAtStart" {
@@ -131,7 +142,7 @@ test "addTextAtStart" {
         .start = .{ .line = 0, .character = 0 },
         .end = .{ .line = 0, .character = 0 },
     });
-    try std.testing.expectEqualStrings("Hello world", doc.data);
+    try std.testing.expectEqualStrings("Hello world", doc.text);
 }
 
 test "ChangeText" {
@@ -142,7 +153,7 @@ test "ChangeText" {
         .start = .{ .line = 0, .character = 0 },
         .end = .{ .line = 0, .character = 1 },
     });
-    try std.testing.expectEqualStrings("Hello world", doc.data);
+    try std.testing.expectEqualStrings("Hello world", doc.text);
 }
 
 test "RemoveText" {
@@ -153,7 +164,7 @@ test "RemoveText" {
         .start = .{ .line = 0, .character = 5 },
         .end = .{ .line = 0, .character = 6 },
     });
-    try std.testing.expectEqualStrings("Helloworld", doc.data);
+    try std.testing.expectEqualStrings("Helloworld", doc.text);
 }
 
 test "RemoveTextAtStart" {
@@ -164,7 +175,7 @@ test "RemoveTextAtStart" {
         .start = .{ .line = 0, .character = 0 },
         .end = .{ .line = 0, .character = 1 },
     });
-    try std.testing.expectEqualStrings("ello world", doc.data);
+    try std.testing.expectEqualStrings("ello world", doc.text);
 }
 
 test "RemoveTextAtEnd" {
@@ -175,5 +186,5 @@ test "RemoveTextAtEnd" {
         .start = .{ .line = 0, .character = 10 },
         .end = .{ .line = 0, .character = 11 },
     });
-    try std.testing.expectEqualStrings("Hello worl", doc.data);
+    try std.testing.expectEqualStrings("Hello worl", doc.text);
 }
