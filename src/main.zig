@@ -6,8 +6,10 @@ const State = @import("analysis.zig").State;
 
 const Logger = @import("logger.zig").Logger;
 
+const builtin = @import("builtin");
+
 pub const std_options = .{
-    .log_level = .info,
+    .log_level = if (builtin.mode == .Debug) .debug else .info,
     .logFn = Logger.log,
 };
 
