@@ -29,6 +29,13 @@ pub const State = struct {
         try self.documents.put(key, doc);
     }
 
+    pub fn closeDocument(self: *State, name: []u8) void {
+        const entry = self.documents.getEntry(name);
+        self.allocator.free(entry.?.key_ptr.*);
+        entry.?.value_ptr.deinit();
+        _ = self.documents.remove(name);
+    }
+
     pub fn findDiagnostics(self: State, uri: []u8) !std.ArrayList(lsp.Diagnostic) {
         const doc = self.documents.get(uri).?;
         var diagnostics = std.ArrayList(lsp.Diagnostic).init(self.allocator);

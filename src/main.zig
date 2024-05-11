@@ -84,6 +84,9 @@ fn handleMessage(allocator: std.mem.Allocator, state: *State, msg: rpc.DecodedMe
         rpc.MethodType.TextDocument_DidChange => {
             try handleChangeDoc(allocator, state, msg.content);
         },
+        rpc.MethodType.TextDocument_DidClose => {
+            try handleCloseDoc(allocator, state, msg.content);
+        },
         rpc.MethodType.TextDocument_Hover => {
             try handleHover(allocator, state, msg.content);
         },
@@ -111,7 +114,8 @@ fn handleOpenDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8) !
     defer parsed.deinit();
 
     const doc = parsed.value.params.textDocument;
-    std.log.info("Opened {s}\n{s}", .{ doc.uri, doc.text });
+    std.log.info("Opened {s}", .{doc.uri});
+    std.log.debug("{s}", .{doc.text});
     try state.openDocument(doc.uri, doc.text);
 
     const diagnostics = try state.findDiagnostics(doc.uri);
@@ -136,7 +140,7 @@ fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8)
         try state.updateDocument(doc_params.textDocument.uri, change.text, change.range);
     }
 
-    std.log.info("Updated document {s}", .{state.documents.get(doc_params.textDocument.uri).?.doc.text});
+    std.log.debug("Updated document {s}", .{state.documents.get(doc_params.textDocument.uri).?.doc.text});
 
     const diagnostics = try state.findDiagnostics(doc_params.textDocument.uri);
     defer diagnostics.deinit();
@@ -148,6 +152,13 @@ fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8)
             .diagnostics = diagnostics.items,
         },
     });
+}
+
+fn handleCloseDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8) !void {
+    const parsed = try std.json.parseFromSlice(lsp.Notification.DidCloseTextDocument, allocator, msg, .{ .ignore_unknown_fields = true });
+    defer parsed.deinit();
+
+    state.closeDocument(parsed.value.params.textDocument.uri);
 }
 
 fn handleHover(allocator: std.mem.Allocator, state: *State, msg: []const u8) !void {

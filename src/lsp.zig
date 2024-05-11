@@ -149,6 +149,16 @@ pub const Notification = struct {
             text: []u8,
         };
     };
+
+    pub const DidCloseTextDocument = struct {
+        jsonrpc: []const u8 = "2.0",
+        method: []u8,
+        params: Params,
+        const Params = struct {
+            textDocument: TextDocumentIdentifier,
+        };
+    };
+
     pub const PublishDiagnostics = struct {
         jsonrpc: []const u8 = "2.0",
         method: []const u8,
