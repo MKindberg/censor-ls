@@ -144,14 +144,13 @@ fn handleOpenDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8) !
     std.log.debug("{s}", .{doc.text});
     try state.openDocument(doc.uri, doc.text);
 
-    const diagnostics = try state.findDiagnostics(doc.uri);
-    defer diagnostics.deinit();
+    const diagnostics = state.getDiagnostics(doc.uri);
 
     try writeResponse(allocator, lsp.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .uri = doc.uri,
-            .diagnostics = diagnostics.items,
+            .diagnostics = diagnostics,
         },
     });
 }
@@ -168,14 +167,13 @@ fn handleChangeDoc(allocator: std.mem.Allocator, state: *State, msg: []const u8)
 
     std.log.debug("Updated document {s}", .{state.documents.get(doc_params.textDocument.uri).?.doc.text});
 
-    const diagnostics = try state.findDiagnostics(doc_params.textDocument.uri);
-    defer diagnostics.deinit();
+    const diagnostics = state.getDiagnostics(doc_params.textDocument.uri);
 
     try writeResponse(allocator, lsp.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .uri = doc_params.textDocument.uri,
-            .diagnostics = diagnostics.items,
+            .diagnostics = diagnostics,
         },
     });
 }
