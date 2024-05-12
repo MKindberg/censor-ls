@@ -210,7 +210,8 @@ fn handleCodeAction(allocator: std.mem.Allocator, state: *State, msg: []const u8
     const doc = state.documents.get(uri).?;
     for (doc.config.items) |item| {
         if (item.replacement) |replacement| {
-            if (doc.doc.findInRange(in_range, item.text)) |range| {
+            var it = doc.doc.findInRange(in_range, item.text);
+            if (it.next()) |range| {
                 const edit: [1]lsp.TextEdit = .{.{ .range = range, .newText = replacement }};
 
                 std.log.info("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, range.start.line, range.start.character, range.end.line, range.end.character });

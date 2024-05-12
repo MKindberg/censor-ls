@@ -24,8 +24,8 @@ pub const Document = struct {
     }
 
     pub fn update(self: *Document, text: []const u8, range: lsp.Range) !void {
-        const range_start = self.posToIdx(range.start) orelse self.text.len;
-        const range_end = self.posToIdx(range.end) orelse self.text.len;
+        const range_start = posToIdx(self.text, range.start) orelse self.text.len;
+        const range_end = posToIdx(self.text, range.end) orelse self.text.len;
         const range_len = range_end - range_start;
         const new_len = self.text.len + text.len - range_len;
         const old_len = self.text.len;
@@ -46,64 +46,85 @@ pub const Document = struct {
         self.text = self.data[0..new_len];
     }
 
-    fn idxToPos(self: Document, idx: usize) ?lsp.Position {
-        if (idx > self.text.len) {
+    fn idxToPos(text: []const u8, idx: usize) ?lsp.Position {
+        if (idx > text.len) {
             return null;
         }
-        const line = std.mem.count(u8, self.text[0..idx], "\n");
+        const line = std.mem.count(u8, text[0..idx], "\n");
         if (line == 0) {
             return .{ .line = 0, .character = idx };
         }
-        const col = idx - (std.mem.lastIndexOf(u8, self.text[0..idx], "\n") orelse 0) - 1;
+        const col = idx - (std.mem.lastIndexOf(u8, text[0..idx], "\n") orelse 0) - 1;
         return .{ .line = line, .character = col };
     }
 
-    fn posToIdx(self: Document, pos: lsp.Position) ?usize {
+    fn posToIdx(text: []const u8, pos: lsp.Position) ?usize {
         var offset: usize = 0;
         var i: usize = 0;
         while (i < pos.line) : (i += 1) {
-            if (std.mem.indexOf(u8, self.text[offset..], "\n")) |idx| {
+            if (std.mem.indexOf(u8, text[offset..], "\n")) |idx| {
                 offset += idx + 1;
             } else return null;
         }
         return offset + pos.character;
     }
-    pub fn find(self: Document, pattern: []const u8) !std.ArrayList(lsp.Range) {
-        var hits = std.ArrayList(lsp.Range).init(self.allocator);
-        errdefer hits.deinit();
-        if (pattern.len == 0) {
-            return hits;
-        }
-        var offset: usize = 0;
-        while (std.mem.indexOf(u8, self.text[offset..], pattern)) |i| {
-            const idx = i + offset;
-            const end_idx = idx + pattern.len;
-            offset = end_idx;
-            const start_pos = self.idxToPos(idx).?;
-            const end_pos = self.idxToPos(end_idx).?;
-            try hits.append(lsp.Range{
-                .start = start_pos,
-                .end = end_pos,
-            });
-        }
-        return hits;
+
+    pub fn find(self: Document, pattern: []const u8) FindIterator {
+        return FindIterator.init(self.text, pattern);
     }
 
-    pub fn findInRange(self: Document, range: lsp.Range, pattern: []const u8) ?lsp.Range {
-        var start_idx = self.posToIdx(range.start).?;
+    pub fn findInRange(self: Document, range: lsp.Range, pattern: []const u8) FindIterator {
+        var start_idx = posToIdx(self.text, range.start).?;
         start_idx -= @min(start_idx, pattern.len);
 
-        var end_idx = self.posToIdx(range.end).?;
+        var end_idx = posToIdx(self.text, range.end).?;
         end_idx = @min(self.text.len, end_idx + pattern.len);
 
-        if (std.mem.indexOf(u8, self.text[start_idx..end_idx], pattern)) |i| {
-            const idx = i + start_idx;
-            const start_pos = self.idxToPos(idx).?;
-            const end_pos = self.idxToPos(idx + pattern.len).?;
-            return .{
+        return FindIterator.initWithOffset(self.text, pattern, start_idx, end_idx);
+    }
+};
+
+pub const FindIterator = struct {
+    /// The text to search in.
+    text: []const u8,
+    /// The pattern to search for.
+    pattern: []const u8,
+    /// The current offset in the text.
+    offset: usize = 0,
+    end: ?usize = null,
+
+    const Self = @This();
+    pub fn init(text: []const u8, pattern: []const u8) Self {
+        return FindIterator{
+            .text = text,
+            .pattern = pattern,
+        };
+    }
+
+    pub fn initWithOffset(text: []const u8, pattern: []const u8, start: usize, end: usize) Self {
+        return FindIterator{
+            .text = text,
+            .pattern = pattern,
+            .offset = start,
+            .end = end,
+        };
+    }
+
+    pub fn next(self: *Self) ?lsp.Range {
+        if (self.offset >= self.text.len) {
+            return null;
+        }
+        if (std.mem.indexOf(u8, self.text[self.offset..(self.end orelse self.text.len)], self.pattern)) |i| {
+            const idx = i + self.offset;
+            const start_pos = Document.idxToPos(self.text, idx).?;
+            const end_pos = Document.idxToPos(self.text, idx + self.pattern.len).?;
+            self.offset = idx + self.pattern.len;
+            const res = lsp.Range{
                 .start = start_pos,
                 .end = end_pos,
             };
+            std.log.debug("Found pattern at: {}", .{res});
+            return res;
         }
         return null;
     }

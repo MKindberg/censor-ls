@@ -42,9 +42,8 @@ pub const State = struct {
         errdefer diagnostics.deinit();
 
         for (doc.config.items) |item| {
-            const hits = try doc.doc.find(item.text);
-            defer hits.deinit();
-            for (hits.items) |range| {
+            var iter = doc.doc.find(item.text);
+            while (iter.next()) |range| {
                 try diagnostics.append(.{
                     .range = range,
                     .severity = @intFromEnum(item.severity),
@@ -64,7 +63,8 @@ pub const State = struct {
     pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {
         const doc = self.documents.get(uri).?;
         for (doc.config.items) |item| {
-            if (doc.doc.findInRange(.{ .start = pos, .end = pos }, item.text) != null) {
+            var iter = doc.doc.findInRange(.{ .start = pos, .end = pos }, item.text);
+            if (iter.next() != null) {
                 return lsp.Response.Hover.init(id, item.message);
             }
         }
