@@ -2,6 +2,7 @@ const std = @import("std");
 const lsp = @import("lsp.zig");
 const Document = @import("document.zig").Document;
 const Config = @import("config.zig").Config;
+const Severity = @import("config.zig").Severity;
 
 pub const State = struct {
     allocator: std.mem.Allocator,
@@ -89,6 +90,7 @@ const DocData = struct {
         for (self.config.items) |item| {
             var iter = self.doc.find(item.text);
             while (iter.next()) |range| {
+                if (item.severity == Severity.None) continue;
                 try self.diagnostics.append(.{
                     .range = range,
                     .severity = @intFromEnum(item.severity),

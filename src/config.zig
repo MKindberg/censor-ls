@@ -70,7 +70,7 @@ pub const ParseConfig = struct {
 
 const Item = struct {
     text: []const u8,
-    replacement: ?[]const u8,
+    replacement: ?[]const u8 = null,
     severity: Severity = .Error,
     message: []const u8 = "Disallowed text found",
 
@@ -93,7 +93,8 @@ const Item = struct {
     }
 };
 
-const Severity = enum(u8) {
+pub const Severity = enum(u8) {
+    None = 0,
     Error = 1,
     Warning,
     Info,
@@ -111,6 +112,8 @@ const Severity = enum(u8) {
                     return .Info;
                 } else if (std.mem.eql(u8, s, "hint") or std.mem.eql(u8, s, "Hint")) {
                     return .Hint;
+                } else if (std.mem.eql(u8, s, "none") or std.mem.eql(u8, s, "None")) {
+                    return .None;
                 } else {
                     return error.UnexpectedToken;
                 }
