@@ -217,7 +217,9 @@ fn handleCodeAction(allocator: std.mem.Allocator, state: *State, msg: []const u8
                 defer change.deinit(allocator);
                 try change.map.put(allocator, uri, edit[0..]);
 
-                const action: [1]lsp.Response.CodeAction.Result = .{.{ .title = "Censor", .edit = .{ .changes = change } }};
+                var buf: [256]u8 = undefined;
+                const title = try std.fmt.bufPrint(&buf, "Change '{s}' to '{s}'", .{ item.text, replacement });
+                const action: [1]lsp.Response.CodeAction.Result = .{.{ .title = title, .edit = .{ .changes = change } }};
 
                 const response = lsp.Response.CodeAction{ .id = parsed.value.id, .result = action[0..] };
 
