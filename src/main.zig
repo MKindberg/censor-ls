@@ -207,6 +207,7 @@ fn handleCodeAction(allocator: std.mem.Allocator, state: *State, msg: []const u8
 
     const doc = state.documents.get(uri).?;
     for (doc.config.items) |item| {
+        if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
         if (item.replacement) |replacement| {
             var it = doc.doc.findInRange(in_range, item.text);
             if (it.next()) |range| {

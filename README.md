@@ -36,7 +36,8 @@ The file should have the following format:
             "text": "<The text to look for",
             "replacement": <The text to replace it with on code action (optional)>",
             "severity": "<error|warning|info|hint|nothing (default: error)>",
-            "message": "<A message to display (default: Disallowed text found)>"
+            "message": "<A message to display (default: Disallowed text found)>",
+            "file_end": "file endings to apply this item for"
         }
     ]
 }

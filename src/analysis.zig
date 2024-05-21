@@ -46,12 +46,13 @@ pub const State = struct {
         var doc = self.documents.getPtr(name).?;
         try doc.doc.update(text, range);
 
-        try doc.findDiagnostics();
+        try doc.findDiagnostics(name);
     }
 
     pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {
         const doc = self.documents.get(uri).?;
         for (doc.config.items) |item| {
+            if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
             var iter = doc.doc.findInRange(.{ .start = pos, .end = pos }, item.text);
             if (iter.next() != null) {
                 return lsp.Response.Hover.init(id, item.message);
@@ -80,14 +81,15 @@ const DocData = struct {
         const diagnostics = std.ArrayList(lsp.Diagnostic).init(allocator);
 
         var self = Self{ .doc = doc, .config = config, .diagnostics = diagnostics };
-        try self.findDiagnostics();
+        try self.findDiagnostics(uri);
 
         return self;
     }
 
-    fn findDiagnostics(self: *Self) !void {
+    fn findDiagnostics(self: *Self, uri: []const u8) !void {
         self.diagnostics.clearRetainingCapacity();
         for (self.config.items) |item| {
+            if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
             var iter = self.doc.find(item.text);
             while (iter.next()) |range| {
                 if (item.severity == Severity.None) continue;

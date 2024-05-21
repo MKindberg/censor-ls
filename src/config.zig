@@ -73,23 +73,27 @@ const Item = struct {
     replacement: ?[]const u8 = null,
     severity: Severity = .Error,
     message: []const u8 = "Disallowed text found",
+    file_end: ?[]const u8 = null,
 
     const Self = @This();
     fn duplicate(self: Self, allocator: std.mem.Allocator) !Item {
         const text = try allocator.dupe(u8, self.text);
         const replacement = if (self.replacement) |s| try allocator.dupe(u8, s) else null;
         const message = try allocator.dupe(u8, self.message);
+        const file_end = if (self.file_end) |s| try allocator.dupe(u8, s) else null;
         return Item{
             .text = text,
             .replacement = replacement,
             .severity = self.severity,
             .message = message,
+            .file_end = file_end,
         };
     }
     fn deinit(self: Item, allocator: std.mem.Allocator) void {
         allocator.free(self.text);
         if (self.replacement) |s| allocator.free(s);
         allocator.free(self.message);
+        if (self.file_end) |s| allocator.free(s);
     }
 };
 
