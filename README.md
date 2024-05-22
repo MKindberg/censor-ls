@@ -4,7 +4,10 @@ Censor-ls is a language server that will let you mark words with a diagnostic me
 
 ## Installation
 
-Download the binary from releases into your path or download the repo, install zig 0.12 and run `zig build --release=safe --prefix <install_dir>`
+Use one of the following methods:
+* Download the binary from releases into your path (note that checksum isn't related to the binary)
+* Download the repo, install zig 0.12 and run `zig build --release=safe --prefix <install_dir>`
+* Install with [mason.nvim](https://github.com/williamboman/mason.nvim) by adding `github:mkindberg/censor-ls` as a registry.
 
 ## Setup
 

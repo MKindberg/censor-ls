@@ -25,3 +25,23 @@ jobs:
           prerelease: false
           files: zig-out/bin/censor-ls
 
+      - uses: actions/checkout@v3
+      - name: Set up yq
+        shell: bash
+        run: |
+          sudo curl -fL "https://github.com/mikefarah/yq/releases/download/v4.30.6/yq_linux_amd64" -o /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+      - name: Compile
+        shell: bash
+        run: |
+          zip -r registry.json.zip registry.json
+          sha256sum registry.json registry.json.zip > checksums.txt
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.tag.outputs.tag }}
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+          files: |
+            registry.json.zip
+            checksums.txt

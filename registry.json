@@ -1,0 +1,27 @@
+[
+  {
+    "name": "censor-ls",
+    "description": "Help with avoiding certain words",
+    "homepage": "https://github.com/mkindberg/censor-ls",
+    "licenses": [
+      "MIT"
+    ],
+    "languages": [],
+    "categories": [
+      "LSP"
+    ],
+    "source": {
+      "id": "pkg:github/mkindberg/censor-ls@v0.5.0",
+      "asset": [
+        {
+          "target": "linux_x64",
+          "file": "censor-ls",
+          "bin": "censor-ls"
+        }
+      ]
+    },
+    "bin": {
+      "censor-ls": "{{source.asset.bin}}"
+    }
+  }
+]
