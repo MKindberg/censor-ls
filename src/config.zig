@@ -27,7 +27,7 @@ pub const Config = struct {
         var buf: [256]u8 = undefined;
 
         const config_path = try std.fmt.bufPrint(&buf, "{s}/.config/censor-ls/config.json", .{home});
-        std.fs.makeDirAbsolute(config_path) catch {};
+        std.fs.makeDirAbsolute(std.fs.path.dirname(config_path).?) catch {};
         try self.parseFile(allocator, config_path);
 
         return self;

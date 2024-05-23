@@ -29,7 +29,7 @@ pub fn main() !u8 {
     var buf: [256]u8 = undefined;
 
     const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/censor-ls/log.txt", .{home});
-    std.fs.makeDirAbsolute(log_path) catch {};
+    std.fs.makeDirAbsolute(std.fs.path.dirname(log_path).?) catch {};
     try Logger.init(log_path);
     defer Logger.deinit();
 
