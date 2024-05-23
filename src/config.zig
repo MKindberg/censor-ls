@@ -11,15 +11,12 @@ pub const Config = struct {
 
         if (file_path) |fp| {
             var file_buf: [std.posix.PATH_MAX]u8 = undefined;
-            var path: []const u8 = fp;
+            var path: []const u8 = std.fs.path.dirname(fp).?;
             var file = try std.fmt.bufPrint(&file_buf, "{s}/.censor.json", .{path});
-            if (std.fs.cwd().access(file, .{}) != std.posix.AccessError.FileNotFound) {
-                try self.parseFile(allocator, file);
-            }
+            try self.parseFile(allocator, file);
 
             while (std.fs.path.dirname(path)) |p| : (path = p) {
                 file = try std.fmt.bufPrint(&file_buf, "{s}/.censor.json", .{path});
-                std.fs.cwd().access(file, .{}) catch continue;
                 try self.parseFile(allocator, file);
             }
         }
@@ -41,7 +38,12 @@ pub const Config = struct {
     }
 
     fn parseFile(self: *Self, allocator: std.mem.Allocator, path: []const u8) !void {
-        const config_file = try std.fs.cwd().openFile(path, .{});
+        const config_file = std.fs.cwd().openFile(path, .{}) catch |err| {
+            if (err == std.fs.File.OpenError.FileNotFound) {
+                return;
+            }
+            return err;
+        };
         defer config_file.close();
         const config_data = try config_file.readToEndAlloc(allocator, 10000);
         defer allocator.free(config_data);
