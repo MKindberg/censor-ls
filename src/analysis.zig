@@ -23,7 +23,7 @@ pub const State = struct {
         self.documents.deinit();
     }
 
-    pub fn openDocument(self: *State, name: []u8, content: []const u8) !void {
+    pub fn openDocument(self: *State, name: []const u8, content: []const u8) !void {
         const key = try self.allocator.alloc(u8, name.len);
         std.mem.copyForwards(u8, key, name);
         const doc = try DocData.init(self.allocator, content, name);
@@ -31,18 +31,17 @@ pub const State = struct {
         try self.documents.put(key, doc);
     }
 
-    pub fn closeDocument(self: *State, name: []u8) void {
-        const entry = self.documents.getEntry(name);
-        self.allocator.free(entry.?.key_ptr.*);
-        entry.?.value_ptr.deinit();
-        _ = self.documents.remove(name);
+    pub fn closeDocument(self: *State, name: []const u8) void {
+        const entry = self.documents.fetchRemove(name);
+        self.allocator.free(entry.?.key);
+        entry.?.value.deinit();
     }
 
     pub fn getDiagnostics(self: State, uri: []u8) []lsp.Diagnostic {
         return self.documents.get(uri).?.diagnostics.items;
     }
 
-    pub fn updateDocument(self: *State, name: []u8, text: []const u8, range: lsp.Range) !void {
+    pub fn updateDocument(self: *State, name: []const u8, text: []const u8, range: lsp.Range) !void {
         var doc = self.documents.getPtr(name).?;
         try doc.doc.update(text, range);
 
