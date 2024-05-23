@@ -256,3 +256,31 @@ fn handleShutingDown(allocator: std.mem.Allocator, method_type: rpc.MethodType, 
     }
     return RunState.Run;
 }
+
+test "Updated version" {
+    const Registry = struct {
+        source: Source,
+        const Source = struct {
+            id: []const u8,
+        };
+    };
+
+    const res = try std.ChildProcess.run(.{ .allocator = std.testing.allocator, .argv = &[_][]const u8{ "git", "tag", "-l" } });
+    defer std.testing.allocator.free(res.stdout);
+    defer std.testing.allocator.free(res.stderr);
+    const stdout = std.mem.trim(u8, res.stdout, "\n");
+    var it = std.mem.splitBackwardsScalar(u8, stdout, '\n');
+    const tag_version = while (it.next()) |tag| {
+        if (tag[0] != 'v') continue;
+        break tag;
+    } else unreachable;
+
+    const registry_file = try std.fs.cwd().openFile("registry.json", .{});
+    defer registry_file.close();
+    const registry_data = try registry_file.readToEndAlloc(std.testing.allocator, 10000);
+    defer std.testing.allocator.free(registry_data);
+    const parsed = try std.json.parseFromSlice([]Registry, std.testing.allocator, registry_data, .{ .ignore_unknown_fields = true });
+    defer parsed.deinit();
+
+    try std.testing.expect(std.mem.endsWith(u8, parsed.value[0].source.id, tag_version));
+}

@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+# Adding a dependecy towards registry.json in the build system seems hard so run
+# the version test manually every time.
+zig test src/main.zig --test-filter "Updated version"
+zig build test
