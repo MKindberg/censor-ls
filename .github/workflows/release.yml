@@ -15,25 +15,11 @@ jobs:
       - uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.12.0
-
-      - name: "Build"
-        run: zig build --release=safe
-
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
-          files: zig-out/bin/censor-ls
-
-      - uses: actions/checkout@v3
-      - name: Set up yq
-        shell: bash
-        run: |
-          sudo curl -fL "https://github.com/mikefarah/yq/releases/download/v4.30.6/yq_linux_amd64" -o /usr/local/bin/yq
-          sudo chmod +x /usr/local/bin/yq
       - name: Compile
         shell: bash
         run: |
+          zig build --release=safe
+          zig build gen_registry
           zip -r registry.json.zip registry.json
           sha256sum registry.json registry.json.zip > checksums.txt
       - name: Release
@@ -45,3 +31,4 @@ jobs:
           files: |
             registry.json.zip
             checksums.txt
+            zig-out/bin/censor-ls
