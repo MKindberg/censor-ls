@@ -11,7 +11,7 @@
       "LSP"
     ],
     "source": {
-      "id": "pkg:github/mkindberg/censor-ls@v0.5.1",
+      "id": "pkg:github/mkindberg/censor-ls@v0.5.2",
       "asset": [
         {
           "target": "linux_x64",

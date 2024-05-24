@@ -11,7 +11,7 @@ pub const Config = struct {
 
         if (file_path) |fp| {
             var file_buf: [std.posix.PATH_MAX]u8 = undefined;
-            var path: []const u8 = std.fs.path.dirname(fp).?;
+            var path: []const u8 = std.fs.path.dirname(fp) orelse "";
             var file = try std.fmt.bufPrint(&file_buf, "{s}/.censor.json", .{path});
             try self.parseFile(allocator, file);
 
