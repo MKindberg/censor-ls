@@ -1,265 +1,195 @@
 const std = @import("std");
+const lsp_types = @import("lsp_types.zig");
+const rpc = @import("rpc.zig");
 
-pub const Request = struct {
-    pub const Request = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        method: []u8,
-    };
-    pub const Initialize = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        method: []u8,
-        params: Params,
+const Reader = @import("reader.zig").Reader;
 
-        const Params = struct {
-            clientInfo: ?ClientInfo,
+pub fn writeResponse(allocator: std.mem.Allocator, msg: anytype) !void {
+    const response = try rpc.encodeMessage(allocator, msg);
+    defer response.deinit();
 
-            const ClientInfo = struct {
-                name: []u8,
-                version: []u8,
-            };
+    const writer = std.io.getStdOut().writer();
+    _ = try writer.write(response.items);
+    std.log.info("Sent response", .{});
+}
+pub fn Lsp(comptime StateType: type) type {
+    return struct {
+        fn CallbackType(comptime ParamsType: type) type {
+            return fn (allocator: std.mem.Allocator, state: *StateType, params: ParamsType) void;
+        }
+
+        callback_doc_open: ?*const CallbackType(lsp_types.Notification.DidOpenTextDocument.Params) = null,
+        callback_doc_change: ?*const CallbackType(lsp_types.Notification.DidChangeTextDocument.Params) = null,
+        callback_doc_close: ?*const CallbackType(lsp_types.Notification.DidCloseTextDocument.Params) = null,
+        callback_hover: ?*const CallbackType(lsp_types.Request.Hover) = null,
+        callback_codeAction: ?*const CallbackType(lsp_types.Request.CodeAction) = null,
+
+        state: *StateType,
+        allocator: std.mem.Allocator,
+
+        const RunState = enum {
+            Run,
+            ShutdownOk,
+            ShutdownErr,
         };
-    };
-
-    pub const Hover = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        method: []u8,
-        params: Params,
-
-        pub const Params = struct {
-            textDocument: TextDocumentIdentifier,
-            position: Position,
-        };
-    };
-    pub const CodeAction = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        method: []u8,
-        params: Params,
-
-        const Params = struct {
-            textDocument: TextDocumentIdentifier,
-            range: Range,
-            context: CodeActionContext,
-
-            const CodeActionContext = struct {};
-        };
-    };
-
-    pub const Shutdown = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        method: []u8,
-    };
-};
-
-pub const Response = struct {
-    pub const Initialize = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        result: Result,
-
-        const Result = struct {
-            capabilities: ServerCapabilities,
-            serverInfo: ServerInfo,
-
-            const ServerCapabilities = struct {
-                textDocumentSync: i32,
-                hoverProvider: bool,
-                codeActionProvider: bool,
-            };
-        };
-        const ServerInfo = struct { name: []const u8, version: []const u8 };
 
         const Self = @This();
+        pub fn init(allocator: std.mem.Allocator, state: *StateType) Self {
+            return Self{ .allocator = allocator, .state = state };
+        }
 
-        pub fn init(id: i32) Self {
-            return Self{
-                .jsonrpc = "2.0",
-                .id = id,
-                .result = .{
-                    .capabilities = .{
-                        .textDocumentSync = 2,
-                        .hoverProvider = true,
-                        .codeActionProvider = true,
-                    },
-                    .serverInfo = .{
-                        .name = "censor-ls",
-                        .version = "0.1",
-                    },
+        pub fn registerDocOpenCallback(self: *Self, callback: *const CallbackType(lsp_types.Notification.DidOpenTextDocument.Params)) void {
+            self.callback_doc_open = callback;
+        }
+        pub fn registerDocChangeCallback(self: *Self, callback: *const CallbackType(lsp_types.Notification.DidChangeTextDocument.Params)) void {
+            self.callback_doc_change = callback;
+        }
+        pub fn registerDocCloseCallback(self: *Self, callback: *const CallbackType(lsp_types.Notification.DidCloseTextDocument.Params)) void {
+            self.callback_doc_close = callback;
+        }
+        pub fn registerHoverCallback(self: *Self, callback: *const CallbackType(lsp_types.Request.Hover)) void {
+            self.callback_hover = callback;
+        }
+        pub fn registerCodeActionCallback(self: *Self, callback: *const CallbackType(lsp_types.Request.CodeAction)) void {
+            self.callback_codeAction = callback;
+        }
+
+        pub fn start(self: *Self) !u8 {
+            const stdin = std.io.getStdIn().reader();
+            var reader = Reader.init(self.allocator, stdin);
+            defer reader.deinit();
+
+            var header = std.ArrayList(u8).init(self.allocator);
+            defer header.deinit();
+            var content = std.ArrayList(u8).init(self.allocator);
+            defer content.deinit();
+
+            var run_state = RunState.Run;
+            while (run_state == RunState.Run) {
+                std.log.info("Waiting for header", .{});
+                _ = try reader.readUntilDelimiterOrEof(header.writer(), "\r\n\r\n");
+
+                const content_len_str = "Content-Length: ";
+                const content_len = if (std.mem.indexOf(u8, header.items, content_len_str)) |idx|
+                    try std.fmt.parseInt(usize, header.items[idx + content_len_str.len ..], 10)
+                else {
+                    _ = try std.io.getStdErr().write("Content-Length not found in header\n");
+                    break;
+                };
+                header.clearRetainingCapacity();
+
+                const bytes_read = try reader.readN(content.writer(), content_len);
+                if (bytes_read != content_len) {
+                    break;
+                }
+                defer content.clearRetainingCapacity();
+
+                const decoded = rpc.decodeMessage(self.allocator, content.items) catch |e| {
+                    std.log.info("Failed to decode message: {any}\n", .{e});
+                    continue;
+                };
+                run_state = try self.handleMessage(self.allocator, decoded);
+            }
+            return @intFromBool(run_state == RunState.ShutdownOk);
+        }
+
+        fn handleMessage(self: *Self, allocator: std.mem.Allocator, msg: rpc.DecodedMessage) !RunState {
+            const local_state = struct {
+                var shutdown = false;
+            };
+
+            std.log.info("Received request: {s}", .{msg.method.toString()});
+
+            if (local_state.shutdown and msg.method != rpc.MethodType.Exit) {
+                return try handleShutingDown(allocator, msg.method, msg.content);
+            }
+            switch (msg.method) {
+                rpc.MethodType.Initialize => {
+                    try handleInitialize(allocator, msg.content);
                 },
-            };
-        }
-    };
-
-    pub const Hover = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        result: Result,
-
-        const Result = struct {
-            contents: []const u8,
-        };
-
-        const Self = @This();
-        pub fn init(id: i32, contents: []const u8) Self {
-            return Self{
-                .jsonrpc = "2.0",
-                .id = id,
-                .result = .{
-                    .contents = contents,
+                rpc.MethodType.Initialized => {},
+                rpc.MethodType.TextDocument_DidOpen => {
+                    if (self.callback_doc_open) |callback| {
+                        const parsed = try std.json.parseFromSlice(lsp_types.Notification.DidOpenTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        defer parsed.deinit();
+                        callback(allocator, self.state, parsed.value.params);
+                    }
                 },
-            };
-        }
-    };
-    pub const CodeAction = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        result: []const Result,
-
-        pub const Result = struct {
-            title: []const u8,
-            edit: ?WorkspaceEdit,
-            const WorkspaceEdit = struct {
-                changes: std.json.ArrayHashMap([]const TextEdit),
-            };
-        };
-    };
-
-    pub const Shutdown = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        result: void,
-
-        const Self = @This();
-        pub fn init(request: Request.Shutdown) Self {
-            return Self{
-                .jsonrpc = "2.0",
-                .id = request.id,
-                .result = {},
-            };
-        }
-    };
-
-    pub const Error = struct {
-        jsonrpc: []const u8 = "2.0",
-        id: i32,
-        @"error": ErrorData,
-
-        const Self = @This();
-        pub fn init(id: i32, code: ErrorCode, message: []const u8) Self {
-            return Self{
-                .jsonrpc = "2.0",
-                .id = id,
-                .@"error" = .{
-                    .code = @intFromEnum(code),
-                    .message = message,
+                rpc.MethodType.TextDocument_DidChange => {
+                    if (self.callback_doc_change) |callback| {
+                        const parsed = try std.json.parseFromSlice(lsp_types.Notification.DidChangeTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        defer parsed.deinit();
+                        callback(allocator, self.state, parsed.value.params);
+                    }
                 },
-            };
+                rpc.MethodType.TextDocument_DidClose => {
+                    if (self.callback_doc_close) |callback| {
+                        const parsed = try std.json.parseFromSlice(lsp_types.Notification.DidCloseTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        defer parsed.deinit();
+                        callback(allocator, self.state, parsed.value.params);
+                    }
+                },
+                rpc.MethodType.TextDocument_Hover => {
+                    if (self.callback_hover) |callback| {
+                        const parsed = try std.json.parseFromSlice(lsp_types.Request.Hover, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        defer parsed.deinit();
+                        callback(allocator, self.state, parsed.value);
+                    }
+                },
+                rpc.MethodType.TextDocument_CodeAction => {
+                    if (self.callback_codeAction) |callback| {
+                        const parsed = try std.json.parseFromSlice(lsp_types.Request.CodeAction, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        defer parsed.deinit();
+                        callback(allocator, self.state, parsed.value);
+                    }
+                },
+                rpc.MethodType.Shutdown => {
+                    try handleShutdown(allocator, msg.content);
+                    local_state.shutdown = true;
+                },
+                rpc.MethodType.Exit => {
+                    return RunState.ShutdownErr;
+                },
+            }
+            return RunState.Run;
+        }
+
+        fn handleShutdown(allocator: std.mem.Allocator, msg: []const u8) !void {
+            const parsed = try std.json.parseFromSlice(lsp_types.Request.Shutdown, allocator, msg, .{ .ignore_unknown_fields = true });
+            defer parsed.deinit();
+            const response = lsp_types.Response.Shutdown.init(parsed.value);
+            try writeResponse(allocator, response);
+        }
+
+        fn handleShutingDown(allocator: std.mem.Allocator, method_type: rpc.MethodType, msg: []const u8) !RunState {
+            if (method_type == rpc.MethodType.Exit) {
+                return RunState.ShutdownOk;
+            }
+
+            const parsed = std.json.parseFromSlice(lsp_types.Request.Request, allocator, msg, .{ .ignore_unknown_fields = true });
+
+            if (parsed) |request| {
+                const reply = lsp_types.Response.Error.init(request.value.id, lsp_types.ErrorCode.InvalidRequest, "Shutting down");
+                try writeResponse(allocator, reply);
+                request.deinit();
+            } else |err| if (err == error.UnknownField) {
+                const reply = lsp_types.Response.Error.init(0, lsp_types.ErrorCode.InvalidRequest, "Shutting down");
+                try writeResponse(allocator, reply);
+            }
+            return RunState.Run;
+        }
+
+        fn handleInitialize(allocator: std.mem.Allocator, msg: []const u8) !void {
+            const parsed = try std.json.parseFromSlice(lsp_types.Request.Initialize, allocator, msg, .{ .ignore_unknown_fields = true });
+            defer parsed.deinit();
+            const request = parsed.value;
+
+            const client_info = request.params.clientInfo.?;
+            std.log.info("Connected to {s} {s}", .{ client_info.name, client_info.version });
+
+            const response_msg = lsp_types.Response.Initialize.init(request.id);
+
+            try writeResponse(allocator, response_msg);
         }
     };
-};
-
-pub const Notification = struct {
-    pub const DidOpenTextDocument = struct {
-        jsonrpc: []const u8 = "2.0",
-        method: []u8,
-        params: Params,
-
-        const Params = struct {
-            textDocument: TextDocumentItem,
-        };
-    };
-
-    pub const DidChangeTextDocument = struct {
-        jsonrpc: []const u8 = "2.0",
-        method: []u8,
-        params: Params,
-
-        const Params = struct {
-            textDocument: VersionedTextDocumentIdentifier,
-            contentChanges: []ChangeEvent,
-
-            const VersionedTextDocumentIdentifier = struct {
-                uri: []u8,
-                version: i32,
-            };
-        };
-
-        const ChangeEvent = struct {
-            range: Range,
-            text: []u8,
-        };
-    };
-
-    pub const DidCloseTextDocument = struct {
-        jsonrpc: []const u8 = "2.0",
-        method: []u8,
-        params: Params,
-        const Params = struct {
-            textDocument: TextDocumentIdentifier,
-        };
-    };
-
-    pub const PublishDiagnostics = struct {
-        jsonrpc: []const u8 = "2.0",
-        method: []const u8,
-        params: Params,
-        const Params = struct {
-            uri: []const u8,
-            diagnostics: []const Diagnostic,
-        };
-    };
-
-    pub const Exit = struct {
-        jsonrpc: []const u8 = "2.0",
-        method: []u8,
-    };
-};
-
-const TextDocumentItem = struct {
-    uri: []u8,
-    languageId: []u8,
-    version: i32,
-    text: []u8,
-};
-
-const TextDocumentIdentifier = struct {
-    uri: []u8,
-};
-
-pub const Range = struct {
-    start: Position,
-    end: Position,
-};
-pub const Position = struct {
-    line: usize,
-    character: usize,
-};
-
-pub const TextEdit = struct {
-    range: Range,
-    newText: []const u8,
-};
-
-pub const Diagnostic = struct {
-    range: Range,
-    severity: i32,
-    source: ?[]const u8,
-    message: []const u8,
-};
-
-pub const ErrorData = struct {
-    code: i32,
-    message: []const u8,
-};
-
-pub const ErrorCode = enum(i32) {
-    ParseError = -32700,
-    InvalidRequest = -32600,
-    MethodNotFound = -32601,
-    InvalidParams = -32602,
-    InternalError = -32603,
-};
+}

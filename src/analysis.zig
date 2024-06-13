@@ -1,5 +1,5 @@
 const std = @import("std");
-const lsp = @import("lsp.zig");
+const lsp_types = @import("lsp_types.zig");
 const Document = @import("document.zig").Document;
 const Config = @import("config.zig").Config;
 const Severity = @import("config.zig").Severity;
@@ -37,24 +37,24 @@ pub const State = struct {
         entry.?.value.deinit();
     }
 
-    pub fn getDiagnostics(self: State, uri: []u8) []lsp.Diagnostic {
+    pub fn getDiagnostics(self: State, uri: []u8) []lsp_types.Diagnostic {
         return self.documents.get(uri).?.diagnostics.items;
     }
 
-    pub fn updateDocument(self: *State, name: []const u8, text: []const u8, range: lsp.Range) !void {
+    pub fn updateDocument(self: *State, name: []const u8, text: []const u8, range: lsp_types.Range) !void {
         var doc = self.documents.getPtr(name).?;
         try doc.doc.update(text, range);
 
         try doc.findDiagnostics(name);
     }
 
-    pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp.Position) ?lsp.Response.Hover {
+    pub fn hover(self: *State, id: i32, uri: []u8, pos: lsp_types.Position) ?lsp_types.Response.Hover {
         const doc = self.documents.get(uri).?;
         for (doc.config.items) |item| {
             if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
             var iter = doc.doc.findInRange(.{ .start = pos, .end = pos }, item.text);
             if (iter.next() != null) {
-                return lsp.Response.Hover.init(id, item.message);
+                return lsp_types.Response.Hover.init(id, item.message);
             }
         }
         return null;
@@ -67,7 +67,7 @@ pub const State = struct {
 const DocData = struct {
     doc: Document,
     config: Config,
-    diagnostics: std.ArrayList(lsp.Diagnostic),
+    diagnostics: std.ArrayList(lsp_types.Diagnostic),
 
     const Self = @This();
     fn init(allocator: std.mem.Allocator, content: []const u8, uri: []const u8) !Self {
@@ -77,7 +77,7 @@ const DocData = struct {
         const path = if (std.mem.startsWith(u8, uri, prefix)) uri[prefix.len..] else null;
         const config = try Config.init(allocator, path);
 
-        const diagnostics = std.ArrayList(lsp.Diagnostic).init(allocator);
+        const diagnostics = std.ArrayList(lsp_types.Diagnostic).init(allocator);
 
         var self = Self{ .doc = doc, .config = config, .diagnostics = diagnostics };
         try self.findDiagnostics(uri);

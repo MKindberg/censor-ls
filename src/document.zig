@@ -1,5 +1,5 @@
 const std = @import("std");
-const lsp = @import("lsp.zig");
+const lsp_types = @import("lsp_types.zig");
 
 pub const Document = struct {
     allocator: std.mem.Allocator,
@@ -23,7 +23,7 @@ pub const Document = struct {
         self.allocator.free(self.data);
     }
 
-    pub fn update(self: *Document, text: []const u8, range: lsp.Range) !void {
+    pub fn update(self: *Document, text: []const u8, range: lsp_types.Range) !void {
         const range_start = posToIdx(self.text, range.start) orelse self.text.len;
         const range_end = posToIdx(self.text, range.end) orelse self.text.len;
         const range_len = range_end - range_start;
@@ -46,7 +46,7 @@ pub const Document = struct {
         self.text = self.data[0..new_len];
     }
 
-    fn idxToPos(text: []const u8, idx: usize) ?lsp.Position {
+    fn idxToPos(text: []const u8, idx: usize) ?lsp_types.Position {
         if (idx > text.len) {
             return null;
         }
@@ -58,7 +58,7 @@ pub const Document = struct {
         return .{ .line = line, .character = col };
     }
 
-    fn posToIdx(text: []const u8, pos: lsp.Position) ?usize {
+    fn posToIdx(text: []const u8, pos: lsp_types.Position) ?usize {
         var offset: usize = 0;
         var i: usize = 0;
         while (i < pos.line) : (i += 1) {
@@ -73,7 +73,7 @@ pub const Document = struct {
         return FindIterator.init(self.text, pattern);
     }
 
-    pub fn findInRange(self: Document, range: lsp.Range, pattern: []const u8) FindIterator {
+    pub fn findInRange(self: Document, range: lsp_types.Range, pattern: []const u8) FindIterator {
         var start_idx = posToIdx(self.text, range.start).?;
         start_idx -= @min(start_idx, pattern.len);
 
@@ -110,7 +110,7 @@ pub const FindIterator = struct {
         };
     }
 
-    pub fn next(self: *Self) ?lsp.Range {
+    pub fn next(self: *Self) ?lsp_types.Range {
         if (self.offset >= self.text.len) {
             return null;
         }
@@ -119,7 +119,7 @@ pub const FindIterator = struct {
             const start_pos = Document.idxToPos(self.text, idx).?;
             const end_pos = Document.idxToPos(self.text, idx + self.pattern.len).?;
             self.offset = idx + self.pattern.len;
-            const res = lsp.Range{
+            const res = lsp_types.Range{
                 .start = start_pos,
                 .end = end_pos,
             };
