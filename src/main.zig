@@ -1,8 +1,7 @@
 const std = @import("std");
-const lsp_types = @import("lsp_types.zig");
-const Reader = @import("reader.zig").Reader;
 const State = @import("analysis.zig").State;
-const lsp = @import("lsp.zig");
+const lsp = @import("lsp");
+const lsp_types = @import("lsp").types;
 
 const Logger = @import("logger.zig").Logger;
 

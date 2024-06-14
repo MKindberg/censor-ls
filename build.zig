@@ -14,6 +14,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const lsp = b.addModule( "lsp", .{
+        .root_source_file = b.path("src/lsp/lsp.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("lsp", lsp);
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);

@@ -1,5 +1,5 @@
 const std = @import("std");
-const lsp_types = @import("lsp_types.zig");
+pub const types = @import("lsp_types.zig");
 const rpc = @import("rpc.zig");
 
 const Reader = @import("reader.zig").Reader;
@@ -18,11 +18,11 @@ pub fn Lsp(comptime StateType: type) type {
             return fn (allocator: std.mem.Allocator, state: *StateType, params: ParamsType) void;
         }
 
-        callback_doc_open: ?*const CallbackType(lsp_types.Notification.DidOpenTextDocument.Params) = null,
-        callback_doc_change: ?*const CallbackType(lsp_types.Notification.DidChangeTextDocument.Params) = null,
-        callback_doc_close: ?*const CallbackType(lsp_types.Notification.DidCloseTextDocument.Params) = null,
-        callback_hover: ?*const CallbackType(lsp_types.Request.Hover) = null,
-        callback_codeAction: ?*const CallbackType(lsp_types.Request.CodeAction) = null,
+        callback_doc_open: ?*const CallbackType(types.Notification.DidOpenTextDocument.Params) = null,
+        callback_doc_change: ?*const CallbackType(types.Notification.DidChangeTextDocument.Params) = null,
+        callback_doc_close: ?*const CallbackType(types.Notification.DidCloseTextDocument.Params) = null,
+        callback_hover: ?*const CallbackType(types.Request.Hover) = null,
+        callback_codeAction: ?*const CallbackType(types.Request.CodeAction) = null,
 
         state: *StateType,
         allocator: std.mem.Allocator,
@@ -38,19 +38,19 @@ pub fn Lsp(comptime StateType: type) type {
             return Self{ .allocator = allocator, .state = state };
         }
 
-        pub fn registerDocOpenCallback(self: *Self, callback: *const CallbackType(lsp_types.Notification.DidOpenTextDocument.Params)) void {
+        pub fn registerDocOpenCallback(self: *Self, callback: *const CallbackType(types.Notification.DidOpenTextDocument.Params)) void {
             self.callback_doc_open = callback;
         }
-        pub fn registerDocChangeCallback(self: *Self, callback: *const CallbackType(lsp_types.Notification.DidChangeTextDocument.Params)) void {
+        pub fn registerDocChangeCallback(self: *Self, callback: *const CallbackType(types.Notification.DidChangeTextDocument.Params)) void {
             self.callback_doc_change = callback;
         }
-        pub fn registerDocCloseCallback(self: *Self, callback: *const CallbackType(lsp_types.Notification.DidCloseTextDocument.Params)) void {
+        pub fn registerDocCloseCallback(self: *Self, callback: *const CallbackType(types.Notification.DidCloseTextDocument.Params)) void {
             self.callback_doc_close = callback;
         }
-        pub fn registerHoverCallback(self: *Self, callback: *const CallbackType(lsp_types.Request.Hover)) void {
+        pub fn registerHoverCallback(self: *Self, callback: *const CallbackType(types.Request.Hover)) void {
             self.callback_hover = callback;
         }
-        pub fn registerCodeActionCallback(self: *Self, callback: *const CallbackType(lsp_types.Request.CodeAction)) void {
+        pub fn registerCodeActionCallback(self: *Self, callback: *const CallbackType(types.Request.CodeAction)) void {
             self.callback_codeAction = callback;
         }
 
@@ -110,35 +110,35 @@ pub fn Lsp(comptime StateType: type) type {
                 rpc.MethodType.Initialized => {},
                 rpc.MethodType.TextDocument_DidOpen => {
                     if (self.callback_doc_open) |callback| {
-                        const parsed = try std.json.parseFromSlice(lsp_types.Notification.DidOpenTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        const parsed = try std.json.parseFromSlice(types.Notification.DidOpenTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
                         defer parsed.deinit();
                         callback(allocator, self.state, parsed.value.params);
                     }
                 },
                 rpc.MethodType.TextDocument_DidChange => {
                     if (self.callback_doc_change) |callback| {
-                        const parsed = try std.json.parseFromSlice(lsp_types.Notification.DidChangeTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        const parsed = try std.json.parseFromSlice(types.Notification.DidChangeTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
                         defer parsed.deinit();
                         callback(allocator, self.state, parsed.value.params);
                     }
                 },
                 rpc.MethodType.TextDocument_DidClose => {
                     if (self.callback_doc_close) |callback| {
-                        const parsed = try std.json.parseFromSlice(lsp_types.Notification.DidCloseTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        const parsed = try std.json.parseFromSlice(types.Notification.DidCloseTextDocument, allocator, msg.content, .{ .ignore_unknown_fields = true });
                         defer parsed.deinit();
                         callback(allocator, self.state, parsed.value.params);
                     }
                 },
                 rpc.MethodType.TextDocument_Hover => {
                     if (self.callback_hover) |callback| {
-                        const parsed = try std.json.parseFromSlice(lsp_types.Request.Hover, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        const parsed = try std.json.parseFromSlice(types.Request.Hover, allocator, msg.content, .{ .ignore_unknown_fields = true });
                         defer parsed.deinit();
                         callback(allocator, self.state, parsed.value);
                     }
                 },
                 rpc.MethodType.TextDocument_CodeAction => {
                     if (self.callback_codeAction) |callback| {
-                        const parsed = try std.json.parseFromSlice(lsp_types.Request.CodeAction, allocator, msg.content, .{ .ignore_unknown_fields = true });
+                        const parsed = try std.json.parseFromSlice(types.Request.CodeAction, allocator, msg.content, .{ .ignore_unknown_fields = true });
                         defer parsed.deinit();
                         callback(allocator, self.state, parsed.value);
                     }
@@ -155,9 +155,9 @@ pub fn Lsp(comptime StateType: type) type {
         }
 
         fn handleShutdown(allocator: std.mem.Allocator, msg: []const u8) !void {
-            const parsed = try std.json.parseFromSlice(lsp_types.Request.Shutdown, allocator, msg, .{ .ignore_unknown_fields = true });
+            const parsed = try std.json.parseFromSlice(types.Request.Shutdown, allocator, msg, .{ .ignore_unknown_fields = true });
             defer parsed.deinit();
-            const response = lsp_types.Response.Shutdown.init(parsed.value);
+            const response = types.Response.Shutdown.init(parsed.value);
             try writeResponse(allocator, response);
         }
 
@@ -166,28 +166,28 @@ pub fn Lsp(comptime StateType: type) type {
                 return RunState.ShutdownOk;
             }
 
-            const parsed = std.json.parseFromSlice(lsp_types.Request.Request, allocator, msg, .{ .ignore_unknown_fields = true });
+            const parsed = std.json.parseFromSlice(types.Request.Request, allocator, msg, .{ .ignore_unknown_fields = true });
 
             if (parsed) |request| {
-                const reply = lsp_types.Response.Error.init(request.value.id, lsp_types.ErrorCode.InvalidRequest, "Shutting down");
+                const reply = types.Response.Error.init(request.value.id, types.ErrorCode.InvalidRequest, "Shutting down");
                 try writeResponse(allocator, reply);
                 request.deinit();
             } else |err| if (err == error.UnknownField) {
-                const reply = lsp_types.Response.Error.init(0, lsp_types.ErrorCode.InvalidRequest, "Shutting down");
+                const reply = types.Response.Error.init(0, types.ErrorCode.InvalidRequest, "Shutting down");
                 try writeResponse(allocator, reply);
             }
             return RunState.Run;
         }
 
         fn handleInitialize(allocator: std.mem.Allocator, msg: []const u8) !void {
-            const parsed = try std.json.parseFromSlice(lsp_types.Request.Initialize, allocator, msg, .{ .ignore_unknown_fields = true });
+            const parsed = try std.json.parseFromSlice(types.Request.Initialize, allocator, msg, .{ .ignore_unknown_fields = true });
             defer parsed.deinit();
             const request = parsed.value;
 
             const client_info = request.params.clientInfo.?;
             std.log.info("Connected to {s} {s}", .{ client_info.name, client_info.version });
 
-            const response_msg = lsp_types.Response.Initialize.init(request.id);
+            const response_msg = types.Response.Initialize.init(request.id);
 
             try writeResponse(allocator, response_msg);
         }

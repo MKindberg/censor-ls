@@ -1,5 +1,5 @@
 const std = @import("std");
-const lsp_types = @import("lsp_types.zig");
+const lsp_types = @import("lsp").types;
 const Document = @import("document.zig").Document;
 const Config = @import("config.zig").Config;
 const Severity = @import("config.zig").Severity;

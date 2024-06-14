@@ -1,5 +1,5 @@
 const std = @import("std");
-const lsp_types = @import("lsp_types.zig");
+const lsp_types = @import("lsp").types;
 
 pub const Document = struct {
     allocator: std.mem.Allocator,

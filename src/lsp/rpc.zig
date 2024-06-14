@@ -1,5 +1,4 @@
 const std = @import("std");
-const Logger = @import("logger.zig").Logger;
 
 pub fn encodeMessage(allocator: std.mem.Allocator, msg: anytype) !std.ArrayList(u8) {
     var res = std.ArrayList(u8).init(allocator);
