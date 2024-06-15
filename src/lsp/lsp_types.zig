@@ -61,35 +61,13 @@ pub const Response = struct {
         id: i32,
         result: ServerData,
 
-        const ServerData = struct {
-            capabilities: ServerCapabilities,
-            serverInfo: ServerInfo,
-
-            const ServerCapabilities = struct {
-                textDocumentSync: i32,
-                hoverProvider: bool,
-                codeActionProvider: bool,
-            };
-        };
-        const ServerInfo = struct { name: []const u8, version: []const u8 };
-
         const Self = @This();
 
-        pub fn init(id: i32) Self {
+        pub fn init(id: i32, server_data: ServerData) Self {
             return Self{
                 .jsonrpc = "2.0",
                 .id = id,
-                .result = .{
-                    .capabilities = .{
-                        .textDocumentSync = 2,
-                        .hoverProvider = true,
-                        .codeActionProvider = true,
-                    },
-                    .serverInfo = .{
-                        .name = "censor-ls",
-                        .version = "0.1",
-                    },
-                },
+                .result = server_data,
             };
         }
     };
@@ -228,6 +206,18 @@ const TextDocumentItem = struct {
 
 const TextDocumentIdentifier = struct {
     uri: []u8,
+};
+
+pub const ServerData = struct {
+    capabilities: ServerCapabilities = .{},
+    serverInfo: ServerInfo,
+
+    const ServerCapabilities = struct {
+        textDocumentSync: i32 = 1,
+        hoverProvider: bool = false,
+        codeActionProvider: bool = false,
+    };
+    const ServerInfo = struct { name: []const u8, version: []const u8 };
 };
 
 pub const Range = struct {

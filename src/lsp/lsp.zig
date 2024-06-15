@@ -25,6 +25,7 @@ pub fn Lsp(comptime StateType: type) type {
         callback_codeAction: ?*const CallbackType(types.Request.CodeAction) = null,
 
         state: *StateType,
+        server_data: types.ServerData,
         allocator: std.mem.Allocator,
 
         const RunState = enum {
@@ -34,8 +35,8 @@ pub fn Lsp(comptime StateType: type) type {
         };
 
         const Self = @This();
-        pub fn init(allocator: std.mem.Allocator, state: *StateType) Self {
-            return Self{ .allocator = allocator, .state = state };
+        pub fn init(allocator: std.mem.Allocator, server_data: types.ServerData, state: *StateType) Self {
+            return Self{ .allocator = allocator, .server_data = server_data, .state = state };
         }
 
         pub fn registerDocOpenCallback(self: *Self, callback: *const CallbackType(types.Notification.DidOpenTextDocument.Params)) void {
@@ -105,7 +106,7 @@ pub fn Lsp(comptime StateType: type) type {
             }
             switch (msg.method) {
                 rpc.MethodType.Initialize => {
-                    try handleInitialize(allocator, msg.content);
+                    try handleInitialize(allocator, msg.content, self.server_data);
                 },
                 rpc.MethodType.Initialized => {},
                 rpc.MethodType.TextDocument_DidOpen => {
@@ -179,7 +180,7 @@ pub fn Lsp(comptime StateType: type) type {
             return RunState.Run;
         }
 
-        fn handleInitialize(allocator: std.mem.Allocator, msg: []const u8) !void {
+        fn handleInitialize(allocator: std.mem.Allocator, msg: []const u8, server_data: types.ServerData) !void {
             const parsed = try std.json.parseFromSlice(types.Request.Initialize, allocator, msg, .{ .ignore_unknown_fields = true });
             defer parsed.deinit();
             const request = parsed.value;
@@ -187,7 +188,7 @@ pub fn Lsp(comptime StateType: type) type {
             const client_info = request.params.clientInfo.?;
             std.log.info("Connected to {s} {s}", .{ client_info.name, client_info.version });
 
-            const response_msg = types.Response.Initialize.init(request.id);
+            const response_msg = types.Response.Initialize.init(request.id, server_data);
 
             try writeResponse(allocator, response_msg);
         }

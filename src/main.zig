@@ -33,7 +33,18 @@ pub fn main() !u8 {
     var state = State.init(allocator);
     defer state.deinit();
 
-    var server = lsp.Lsp(State).init(allocator, &state);
+    const server_data = lsp_types.ServerData{
+        .capabilities = .{
+            .textDocumentSync = 2,
+            .hoverProvider = true,
+            .codeActionProvider = true,
+        },
+        .serverInfo = .{
+            .name = "censor-ls",
+            .version = "0.1.0",
+        },
+    };
+    var server = lsp.Lsp(State).init(allocator, server_data, &state);
 
     server.registerDocOpenCallback(handleOpenDoc);
     server.registerDocChangeCallback(handleChangeDoc);
