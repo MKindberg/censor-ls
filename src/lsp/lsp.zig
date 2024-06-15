@@ -1,5 +1,7 @@
-const std = @import("std");
 pub const types = @import("lsp_types.zig");
+pub const document = @import("document.zig");
+
+const std = @import("std");
 const rpc = @import("rpc.zig");
 
 const Reader = @import("reader.zig").Reader;
