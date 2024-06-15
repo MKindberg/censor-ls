@@ -94,17 +94,17 @@ fn handleCloseDoc(_: std.mem.Allocator, state: *State, params: lsp_types.Notific
     state.closeDocument(params.textDocument.uri);
 }
 
-fn handleHover(allocator: std.mem.Allocator, state: *State, request: lsp_types.Request.Hover) void {
-    if (state.hover(request.id, request.params.textDocument.uri, request.params.position)) |response| {
+fn handleHover(allocator: std.mem.Allocator, state: *State, request: lsp_types.Request.Hover.Params, id: i32) void {
+    if (state.hover(id, request.textDocument.uri, request.position)) |response| {
         lsp.writeResponse(allocator, response) catch unreachable;
 
         std.log.info("Sent Hover response", .{});
     }
 }
 
-fn handleCodeAction(allocator: std.mem.Allocator, state: *State, request: lsp_types.Request.CodeAction) void {
-    const uri = request.params.textDocument.uri;
-    const in_range = request.params.range;
+fn handleCodeAction(allocator: std.mem.Allocator, state: *State, request: lsp_types.Request.CodeAction.Params, id: i32) void {
+    const uri = request.textDocument.uri;
+    const in_range = request.range;
 
     const doc = state.documents.get(uri).?;
     for (doc.config.items) |item| {
@@ -123,7 +123,7 @@ fn handleCodeAction(allocator: std.mem.Allocator, state: *State, request: lsp_ty
                 const title = std.fmt.bufPrint(&buf, "Change '{s}' to '{s}'", .{ item.text, replacement }) catch unreachable;
                 const action: [1]lsp_types.Response.CodeAction.Result = .{.{ .title = title, .edit = .{ .changes = change } }};
 
-                const response = lsp_types.Response.CodeAction{ .id = request.id, .result = action[0..] };
+                const response = lsp_types.Response.CodeAction{ .id = id, .result = action[0..] };
 
                 lsp.writeResponse(allocator, response) catch unreachable;
                 return;

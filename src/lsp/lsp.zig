@@ -14,15 +14,18 @@ pub fn writeResponse(allocator: std.mem.Allocator, msg: anytype) !void {
 }
 pub fn Lsp(comptime StateType: type) type {
     return struct {
-        fn CallbackType(comptime ParamsType: type) type {
-            return fn (allocator: std.mem.Allocator, state: *StateType, params: ParamsType) void;
+        fn NotificationCallback(comptime Type: type) type {
+            return fn (allocator: std.mem.Allocator, state: *StateType, params: Type.Params) void;
+        }
+        fn RequestCallback(comptime Type: type) type {
+            return fn (allocator: std.mem.Allocator, state: *StateType, params: Type.Params, id: i32) void;
         }
 
-        callback_doc_open: ?*const CallbackType(types.Notification.DidOpenTextDocument.Params) = null,
-        callback_doc_change: ?*const CallbackType(types.Notification.DidChangeTextDocument.Params) = null,
-        callback_doc_close: ?*const CallbackType(types.Notification.DidCloseTextDocument.Params) = null,
-        callback_hover: ?*const CallbackType(types.Request.Hover) = null,
-        callback_codeAction: ?*const CallbackType(types.Request.CodeAction) = null,
+        callback_doc_open: ?*const NotificationCallback(types.Notification.DidOpenTextDocument) = null,
+        callback_doc_change: ?*const NotificationCallback(types.Notification.DidChangeTextDocument) = null,
+        callback_doc_close: ?*const NotificationCallback(types.Notification.DidCloseTextDocument) = null,
+        callback_hover: ?*const RequestCallback(types.Request.Hover) = null,
+        callback_codeAction: ?*const RequestCallback(types.Request.CodeAction) = null,
 
         state: *StateType,
         server_data: types.ServerData,
@@ -39,19 +42,19 @@ pub fn Lsp(comptime StateType: type) type {
             return Self{ .allocator = allocator, .server_data = server_data, .state = state };
         }
 
-        pub fn registerDocOpenCallback(self: *Self, callback: *const CallbackType(types.Notification.DidOpenTextDocument.Params)) void {
+        pub fn registerDocOpenCallback(self: *Self, callback: *const NotificationCallback(types.Notification.DidOpenTextDocument)) void {
             self.callback_doc_open = callback;
         }
-        pub fn registerDocChangeCallback(self: *Self, callback: *const CallbackType(types.Notification.DidChangeTextDocument.Params)) void {
+        pub fn registerDocChangeCallback(self: *Self, callback: *const NotificationCallback(types.Notification.DidChangeTextDocument)) void {
             self.callback_doc_change = callback;
         }
-        pub fn registerDocCloseCallback(self: *Self, callback: *const CallbackType(types.Notification.DidCloseTextDocument.Params)) void {
+        pub fn registerDocCloseCallback(self: *Self, callback: *const NotificationCallback(types.Notification.DidCloseTextDocument)) void {
             self.callback_doc_close = callback;
         }
-        pub fn registerHoverCallback(self: *Self, callback: *const CallbackType(types.Request.Hover)) void {
+        pub fn registerHoverCallback(self: *Self, callback: *const RequestCallback(types.Request.Hover)) void {
             self.callback_hover = callback;
         }
-        pub fn registerCodeActionCallback(self: *Self, callback: *const CallbackType(types.Request.CodeAction)) void {
+        pub fn registerCodeActionCallback(self: *Self, callback: *const RequestCallback(types.Request.CodeAction)) void {
             self.callback_codeAction = callback;
         }
 
@@ -134,14 +137,14 @@ pub fn Lsp(comptime StateType: type) type {
                     if (self.callback_hover) |callback| {
                         const parsed = try std.json.parseFromSlice(types.Request.Hover, allocator, msg.content, .{ .ignore_unknown_fields = true });
                         defer parsed.deinit();
-                        callback(allocator, self.state, parsed.value);
+                        callback(allocator, self.state, parsed.value.params, parsed.value.id);
                     }
                 },
                 rpc.MethodType.TextDocument_CodeAction => {
                     if (self.callback_codeAction) |callback| {
                         const parsed = try std.json.parseFromSlice(types.Request.CodeAction, allocator, msg.content, .{ .ignore_unknown_fields = true });
                         defer parsed.deinit();
-                        callback(allocator, self.state, parsed.value);
+                        callback(allocator, self.state, parsed.value.params, parsed.value.id);
                     }
                 },
                 rpc.MethodType.Shutdown => {
