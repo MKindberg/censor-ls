@@ -12,12 +12,6 @@ pub const std_options = .{
     .logFn = Logger.log,
 };
 
-pub const RunState = enum {
-    Run,
-    ShutdownOk,
-    ShutdownErr,
-};
-
 pub fn main() !u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -43,7 +37,7 @@ pub fn main() !u8 {
             .version = "0.1.0",
         },
     };
-    var server = lsp.Lsp(State).init(allocator, server_data, &state);
+    var server = lsp.Lsp(*State).init(allocator, server_data, &state);
     defer server.deinit();
 
     server.registerDocOpenCallback(handleOpenDoc);
@@ -54,7 +48,7 @@ pub fn main() !u8 {
     return server.start();
 }
 
-fn handleOpenDoc(allocator: std.mem.Allocator, context: lsp.Lsp(State).Context, params: lsp_types.Notification.DidOpenTextDocument.Params) void {
+fn handleOpenDoc(allocator: std.mem.Allocator, context: lsp.Lsp(*State).Context, params: lsp_types.Notification.DidOpenTextDocument.Params) void {
     const doc = params.textDocument;
     std.log.info("Opened {s}", .{doc.uri});
 
@@ -70,7 +64,7 @@ fn handleOpenDoc(allocator: std.mem.Allocator, context: lsp.Lsp(State).Context, 
     }) catch unreachable;
 }
 
-fn handleChangeDoc(allocator: std.mem.Allocator, context: lsp.Lsp(State).Context, params: lsp_types.Notification.DidChangeTextDocument.Params) void {
+fn handleChangeDoc(allocator: std.mem.Allocator, context: lsp.Lsp(*State).Context, params: lsp_types.Notification.DidChangeTextDocument.Params) void {
     const diagnostics = context.state.getDiagnostics(params.textDocument.uri, context.document) catch unreachable;
 
     lsp.writeResponse(allocator, lsp_types.Notification.PublishDiagnostics{
@@ -82,7 +76,7 @@ fn handleChangeDoc(allocator: std.mem.Allocator, context: lsp.Lsp(State).Context
     }) catch unreachable;
 }
 
-fn handleHover(allocator: std.mem.Allocator, context: lsp.Lsp(State).Context, request: lsp_types.Request.Hover.Params, id: i32) void {
+fn handleHover(allocator: std.mem.Allocator, context: lsp.Lsp(*State).Context, request: lsp_types.Request.Hover.Params, id: i32) void {
     if (context.state.hover(id, request.textDocument.uri, context.document, request.position)) |response| {
         lsp.writeResponse(allocator, response) catch unreachable;
 
@@ -90,7 +84,7 @@ fn handleHover(allocator: std.mem.Allocator, context: lsp.Lsp(State).Context, re
     }
 }
 
-fn handleCodeAction(allocator: std.mem.Allocator, context: lsp.Lsp(State).Context, request: lsp_types.Request.CodeAction.Params, id: i32) void {
+fn handleCodeAction(allocator: std.mem.Allocator, context: lsp.Lsp(*State).Context, request: lsp_types.Request.CodeAction.Params, id: i32) void {
     const uri = request.textDocument.uri;
     const in_range = request.range;
 
