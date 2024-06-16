@@ -1,0 +1,17 @@
+.{
+    .name = "censor-ls",
+
+    .version = "0.0.0",
+
+    .dependencies = .{
+        .@"lsp-server" = .{
+            .url = "https://github.com/MKindberg/zig-lsp-server/archive/refs/tags/v.0.1.0.tar.gz",
+            .hash = "12200f4eaf76620e63408cbfdad1cbd9708b1afa03713a03f344a669bcb9aea31fd7",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
