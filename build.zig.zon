@@ -5,8 +5,8 @@
 
     .dependencies = .{
         .@"lsp-server" = .{
-            .url = "https://github.com/MKindberg/zig-lsp-server/archive/refs/tags/v0.3.0.tar.gz",
-            .hash = "1220443f6b90b382a547c890ce6935e86c1a0f0501bd5a107546ac92135dc5410a5b",
+            .url = "https://github.com/MKindberg/zig-lsp-server/archive/refs/tags/v0.3.1.tar.gz",
+            .hash = "122098f273b3abb11d8cfeb9904953237471dc1b9e5d51e1d8f3415ce2abd5b9366a",
         },
     },
     .paths = .{

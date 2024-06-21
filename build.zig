@@ -12,11 +12,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const lsp_server = b.dependency( "lsp-server", .{
+    const lsp_server = b.dependency("lsp-server", .{
         .target = target,
         .optimize = optimize,
     });
-    const lsp= lsp_server.module("lsp");
+    const lsp = lsp_server.module("lsp");
     exe.root_module.addImport("lsp", lsp);
 
     b.installArtifact(exe);
@@ -56,6 +56,4 @@ pub fn build(b: *std.Build) void {
     const registry_step = b.step("gen_registry", "Generate mason.nvim registry");
     const registry_generation = b.addRunArtifact(registry_generator);
     registry_step.dependOn(&registry_generation.step);
-
-
 }
