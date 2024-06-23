@@ -12,6 +12,8 @@ pub const std_options = .{
     .logFn = Logger.log,
 };
 
+const Lsp = lsp.Lsp(State);
+
 pub fn main() !u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -24,9 +26,6 @@ pub fn main() !u8 {
     try Logger.init(log_path);
     defer Logger.deinit();
 
-    var state = State.init(allocator);
-    defer state.deinit();
-
     const server_data = lsp_types.ServerData{
         .capabilities = .{
             .hoverProvider = true,
@@ -37,7 +36,7 @@ pub fn main() !u8 {
             .version = "0.1.0",
         },
     };
-    var server = lsp.Lsp(*State).init(allocator, server_data, &state);
+    var server = Lsp.init(allocator, server_data);
     defer server.deinit();
 
     server.registerDocOpenCallback(handleOpenDoc);
@@ -48,55 +47,59 @@ pub fn main() !u8 {
     return server.start();
 }
 
-fn handleOpenDoc(allocator: std.mem.Allocator, context: lsp.Lsp(*State).Context, params: lsp_types.Notification.DidOpenTextDocument.Params) void {
-    const doc = params.textDocument;
-    std.log.info("Opened {s}", .{doc.uri});
+fn handleOpenDoc(allocator: std.mem.Allocator, context: *Lsp.Context) void {
+    const uri = context.document.uri;
+    std.log.info("Opened {s}", .{uri});
+    context.state = State.init(allocator, uri) catch unreachable;
 
-    context.state.openDocument(doc.uri) catch unreachable;
-    const diagnostics = context.state.getDiagnostics(doc.uri, context.document) catch unreachable;
+    const diagnostics = context.state.?.getDiagnostics(uri, context.document) catch unreachable;
 
     lsp.writeResponse(allocator, lsp_types.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
-            .uri = doc.uri,
+            .uri = uri,
+            .diagnostics = diagnostics,
+        },
+    }) catch unreachable;
+}
+fn handleCloseDoc(_: std.mem.Allocator, context: *Lsp.Context) void {
+    const uri = context.document.uri;
+    std.log.info("Closed {s}", .{uri});
+    context.state.?.deinit();
+}
+
+fn handleChangeDoc(allocator: std.mem.Allocator, context: *Lsp.Context, _: []lsp.types.ChangeEvent) void {
+    const diagnostics = context.state.?.getDiagnostics(context.document.uri, context.document) catch unreachable;
+
+    lsp.writeResponse(allocator, lsp_types.Notification.PublishDiagnostics{
+        .method = "textDocument/publishDiagnostics",
+        .params = .{
+            .uri = context.document.uri,
             .diagnostics = diagnostics,
         },
     }) catch unreachable;
 }
 
-fn handleChangeDoc(allocator: std.mem.Allocator, context: lsp.Lsp(*State).Context, params: lsp_types.Notification.DidChangeTextDocument.Params) void {
-    const diagnostics = context.state.getDiagnostics(params.textDocument.uri, context.document) catch unreachable;
-
-    lsp.writeResponse(allocator, lsp_types.Notification.PublishDiagnostics{
-        .method = "textDocument/publishDiagnostics",
-        .params = .{
-            .uri = params.textDocument.uri,
-            .diagnostics = diagnostics,
-        },
-    }) catch unreachable;
-}
-
-fn handleHover(allocator: std.mem.Allocator, context: lsp.Lsp(*State).Context, request: lsp_types.Request.Hover.Params, id: i32) void {
-    if (context.state.hover(id, request.textDocument.uri, context.document, request.position)) |response| {
+fn handleHover(allocator: std.mem.Allocator, context: *Lsp.Context, id: i32, position: lsp.types.Position) void {
+    if (context.state.?.hover(id, context.document.uri, context.document, position)) |response| {
         lsp.writeResponse(allocator, response) catch unreachable;
 
         std.log.info("Sent Hover response", .{});
     }
 }
 
-fn handleCodeAction(allocator: std.mem.Allocator, context: lsp.Lsp(*State).Context, request: lsp_types.Request.CodeAction.Params, id: i32) void {
-    const uri = request.textDocument.uri;
-    const in_range = request.range;
+fn handleCodeAction(allocator: std.mem.Allocator, context: *Lsp.Context, id: i32, range: lsp.types.Range) void {
+    const uri = context.document.uri;
 
-    const info = context.state.doc_infos.get(uri).?;
+    const info = context.state.?.doc_info;
     for (info.config.items) |item| {
         if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
         if (item.replacement) |replacement| {
-            var it = context.document.findInRange(in_range, item.text);
-            if (it.next()) |range| {
-                const edit: [1]lsp_types.TextEdit = .{.{ .range = range, .newText = replacement }};
+            var it = context.document.findInRange(range, item.text);
+            if (it.next()) |r| {
+                const edit: [1]lsp_types.TextEdit = .{.{ .range = r, .newText = replacement }};
 
-                std.log.info("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, range.start.line, range.start.character, range.end.line, range.end.character });
+                std.log.info("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, r.start.line, r.start.character, r.end.line, r.end.character });
                 var change = std.json.ArrayHashMap([]const lsp_types.TextEdit){};
                 defer change.deinit(allocator);
                 change.map.put(allocator, uri, edit[0..]) catch unreachable;

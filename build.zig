@@ -25,15 +25,11 @@ pub fn build(b: *std.Build) void {
 
     run_cmd.step.dependOn(b.getInstallStep());
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
     var cwd = std.fs.cwd().openDir("src", .{ .iterate = true }) catch unreachable;
-    defer cwd.close();
+        defer cwd.close();
     var walker = cwd.walk(b.allocator) catch unreachable;
     defer walker.deinit();
 

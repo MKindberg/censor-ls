@@ -6,46 +6,25 @@ const Severity = @import("config.zig").Severity;
 
 pub const State = struct {
     allocator: std.mem.Allocator,
-    doc_infos: std.StringHashMap(DocInfo),
+    doc_info: DocInfo,
 
-    pub fn init(allocator: std.mem.Allocator) State {
+    pub fn init(allocator: std.mem.Allocator, uri: []const u8) !State {
         return State{
             .allocator = allocator,
-            .doc_infos = std.StringHashMap(DocInfo).init(allocator),
+            .doc_info = try DocInfo.init(allocator, uri),
         };
     }
     pub fn deinit(self: *State) void {
-        var it = self.doc_infos.iterator();
-        while (it.next()) |i| {
-            self.allocator.free(i.key_ptr.*);
-            i.value_ptr.deinit();
-        }
-        self.doc_infos.deinit();
+        self.doc_info.deinit();
     }
 
-    pub fn openDocument(self: *State, name: []const u8) !void {
-        const key = try self.allocator.alloc(u8, name.len);
-        std.mem.copyForwards(u8, key, name);
-        const doc = try DocInfo.init(self.allocator, name);
-
-        try self.doc_infos.put(key, doc);
+    pub fn getDiagnostics(self: *State, uri: []const u8, document: Document) ![]lsp_types.Diagnostic {
+        try self.doc_info.findDiagnostics(uri, document);
+        return self.doc_info.diagnostics.items;
     }
 
-    pub fn closeDocument(self: *State, name: []const u8) void {
-        const entry = self.doc_infos.fetchRemove(name);
-        self.allocator.free(entry.?.key);
-        entry.?.value.deinit();
-    }
-
-    pub fn getDiagnostics(self: State, uri: []u8, document: Document) ![]lsp_types.Diagnostic {
-        var info = self.doc_infos.getPtr(uri).?;
-        try info.findDiagnostics(uri, document);
-        return self.doc_infos.get(uri).?.diagnostics.items;
-    }
-
-    pub fn hover(self: *State, id: i32, uri: []u8, document: Document, pos: lsp_types.Position) ?lsp_types.Response.Hover {
-        const info = self.doc_infos.get(uri).?;
-        for (info.config.items) |item| {
+    pub fn hover(self: *State, id: i32, uri: []const u8, document: Document, pos: lsp_types.Position) ?lsp_types.Response.Hover {
+        for (self.doc_info.config.items) |item| {
             if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
             var iter = document.findInRange(.{ .start = pos, .end = pos }, item.text);
             if (iter.next() != null) {
