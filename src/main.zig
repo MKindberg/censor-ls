@@ -91,8 +91,7 @@ fn handleHover(allocator: std.mem.Allocator, context: *Lsp.Context, id: i32, pos
 fn handleCodeAction(allocator: std.mem.Allocator, context: *Lsp.Context, id: i32, range: lsp.types.Range) void {
     const uri = context.document.uri;
 
-    const info = context.state.?.doc_info;
-    for (info.config.items) |item| {
+    for (context.state.?.config.items) |item| {
         if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
         if (item.replacement) |replacement| {
             var it = context.document.findInRange(range, item.text);
