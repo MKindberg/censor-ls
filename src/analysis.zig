@@ -41,12 +41,12 @@ pub const State = struct {
         return self.diagnostics.items;
     }
 
-    pub fn hover(self: *State, id: i32, uri: []const u8, document: Document, pos: lsp_types.Position) ?lsp_types.Response.Hover {
+    pub fn hover(self: *State, uri: []const u8, document: Document, pos: lsp_types.Position) ?[]const u8 {
         for (self.config.items) |item| {
             if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
             var iter = document.findInRange(.{ .start = pos, .end = pos }, item.text);
             if (iter.next() != null) {
-                return lsp_types.Response.Hover.init(id, item.message);
+                return item.message;
             }
         }
         return null;
