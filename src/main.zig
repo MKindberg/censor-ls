@@ -84,25 +84,5 @@ fn handleHover(_: std.mem.Allocator, context: *Lsp.Context, position: lsp.types.
 }
 
 fn handleCodeAction(arena: std.mem.Allocator, context: *Lsp.Context, range: lsp.types.Range) ?[]const lsp.types.Response.CodeAction.Result {
-    const uri = context.document.uri;
-
-    for (context.state.?.config.items) |item| {
-        if (item.file_end != null and !std.mem.endsWith(u8, uri, item.file_end.?)) continue;
-        if (item.replacement) |replacement| {
-            var it = context.document.findInRange(range, item.text);
-            if (it.next()) |r| {
-                const edit: [1]lsp.types.TextEdit = .{.{ .range = r, .newText = replacement }};
-
-                std.log.info("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, r.start.line, r.start.character, r.end.line, r.end.character });
-                var change = std.json.ArrayHashMap([]const lsp.types.TextEdit){};
-                change.map.put(arena, uri, arena.dupe(lsp.types.TextEdit, edit[0..]) catch unreachable) catch unreachable;
-
-                const title = std.fmt.allocPrint(arena, "Change '{s}' to '{s}'", .{ item.text, replacement }) catch unreachable;
-                const action: [1]lsp.types.Response.CodeAction.Result = .{.{ .title = title, .edit = .{ .changes = change } }};
-
-                return arena.dupe(lsp.types.Response.CodeAction.Result, action[0..]) catch unreachable;
-            }
-        }
-    }
-    return null;
+    return context.state.?.codeAction(arena, context.document, range);
 }
