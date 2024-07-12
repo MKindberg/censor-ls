@@ -2,13 +2,11 @@ const std = @import("std");
 const State = @import("analysis.zig").State;
 const lsp = @import("lsp");
 
-const Logger = @import("logger.zig").Logger;
-
 const builtin = @import("builtin");
 
 pub const std_options = .{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
-    .logFn = Logger.log,
+    .logFn = lsp.log
 };
 
 const Lsp = lsp.Lsp(State);
@@ -17,14 +15,6 @@ var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
 
 pub fn main() !u8 {
-    const home = std.posix.getenv("HOME").?;
-    var buf: [256]u8 = undefined;
-
-    const log_path = try std.fmt.bufPrint(&buf, "{s}/.local/share/censor-ls/log.txt", .{home});
-    std.fs.makeDirAbsolute(std.fs.path.dirname(log_path).?) catch {};
-    try Logger.init(log_path);
-    defer Logger.deinit();
-
     const server_data = lsp.types.ServerData{
         .capabilities = .{
             .hoverProvider = true,
