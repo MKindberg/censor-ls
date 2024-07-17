@@ -5,7 +5,10 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
+    // Get version
     const version_file = b.addWriteFile("version", getVersion(b));
+
+    // Build app
     const exe = b.addExecutable(.{
         .name = "censor-ls",
         .root_source_file = b.path("src/main.zig"),
@@ -26,6 +29,7 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(exe);
 
+    // Run lsp
     const run_cmd = b.addRunArtifact(exe);
 
     run_cmd.step.dependOn(b.getInstallStep());
@@ -33,6 +37,7 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    // Run tests
     var cwd = std.fs.cwd().openDir("src", .{ .iterate = true }) catch unreachable;
     defer cwd.close();
     var walker = cwd.walk(b.allocator) catch unreachable;
@@ -50,6 +55,8 @@ pub fn build(b: *std.Build) void {
         run_tests.has_side_effects = true;
         test_step.dependOn(&run_tests.step);
     }
+
+    // Create mason registry
     const registry_generator = b.addExecutable(.{
         .name = "generate_registry",
         .root_source_file = b.path("tools/mason_registry.zig"),
@@ -61,6 +68,12 @@ pub fn build(b: *std.Build) void {
     const registry_step = b.step("gen_registry", "Generate mason.nvim registry");
     const registry_generation = b.addRunArtifact(registry_generator);
     registry_step.dependOn(&registry_generation.step);
+
+    // Clean
+    const clean_step = b.step("clean", "Clean up");
+
+    clean_step.dependOn(&b.addRemoveDirTree(b.install_path).step);
+    clean_step.dependOn(&b.addRemoveDirTree(b.pathFromRoot(".zig-cache")).step);
 }
 
 fn getVersion(b: *std.Build) []const u8 {

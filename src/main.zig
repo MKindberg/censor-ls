@@ -4,6 +4,15 @@ const lsp = @import("lsp");
 
 const builtin = @import("builtin");
 
+comptime {
+    const required_zig = "0.13.0";
+    const current_zig = builtin.zig_version;
+    const min_zig = std.SemanticVersion.parse(required_zig) catch unreachable;
+    if (current_zig.order(min_zig) == .lt) {
+        @compileError(std.fmt.comptimePrint("At least zig {s} is required", .{min_zig}));
+    }
+}
+
 pub const std_options = .{ .log_level = if (builtin.mode == .Debug) .debug else .info, .logFn = lsp.log };
 
 const Lsp = lsp.Lsp(State);
