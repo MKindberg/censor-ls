@@ -11,7 +11,7 @@ const Registry = struct {
     bin: Bin = .{},
 
     const Source = struct {
-        id: []const u8 = "pkg:github/mkindberg/censor-ls@unknown",
+        id: []const u8 = "pkg:github/mkindberg/censor-ls@" ++ @embedFile("version"),
         asset: []const Asset = &[_]Asset{Asset{}},
     };
     const Bin = struct {
@@ -34,7 +34,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    const res = try std.ChildProcess.run(.{ .allocator = allocator, .argv = &[_][]const u8{ "git", "tag", "-l" } });
+    const res = try std.process.Child.run(.{ .allocator = allocator, .argv = &[_][]const u8{ "git", "tag", "-l" } });
     defer allocator.free(res.stdout);
     defer allocator.free(res.stderr);
     const stdout = std.mem.trim(u8, res.stdout, "\n");

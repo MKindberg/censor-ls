@@ -4,10 +4,7 @@ const lsp = @import("lsp");
 
 const builtin = @import("builtin");
 
-pub const std_options = .{
-    .log_level = if (builtin.mode == .Debug) .debug else .info,
-    .logFn = lsp.log
-};
+pub const std_options = .{ .log_level = if (builtin.mode == .Debug) .debug else .info, .logFn = lsp.log };
 
 const Lsp = lsp.Lsp(State);
 
@@ -18,7 +15,7 @@ pub fn main() !u8 {
     const server_data = lsp.types.ServerData{
         .serverInfo = .{
             .name = "censor-ls",
-            .version = "0.5.5",
+            .version = @embedFile("version"),
         },
     };
     var server = Lsp.init(allocator, server_data);
