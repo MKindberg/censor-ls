@@ -81,7 +81,7 @@ fn getVersion(b: *std.Build) []const u8 {
     const stdout = std.mem.trim(u8, res.stdout, "\n");
     var it = std.mem.splitBackwardsScalar(u8, stdout, '\n');
     while (it.next()) |tag| {
-        if (tag[0] != 'v') continue;
+        if (tag.len > 0 and tag[0] != 'v') continue;
         return tag;
     } else unreachable;
 }
