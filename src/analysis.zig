@@ -62,12 +62,11 @@ pub const State = struct {
                 if (it.next()) |r| {
                     const edit: [1]lsp.types.TextEdit = .{.{ .range = r, .newText = replacement }};
 
-                    std.log.info("Censoring {s} {d}-{d} to {d}-{d}", .{ uri, r.start.line, r.start.character, r.end.line, r.end.character });
                     var change = std.json.ArrayHashMap([]const lsp.types.TextEdit){};
                     change.map.put(arena, uri, arena.dupe(lsp.types.TextEdit, &edit) catch unreachable) catch unreachable;
 
                     const title = std.fmt.allocPrint(arena, "Change '{s}' to '{s}'", .{ item.text, replacement }) catch unreachable;
-                    const action: [1]lsp.types.Response.CodeAction.Result = .{.{ .title = title, .edit = .{ .changes = change } }};
+                    const action: [1]lsp.types.Response.CodeAction.Result = .{.{ .title = title, .edit = .{ .changes = change }, .kind = .QuickFix }};
 
                     return arena.dupe(lsp.types.Response.CodeAction.Result, &action) catch unreachable;
                 }

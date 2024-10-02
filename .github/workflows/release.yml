@@ -12,6 +12,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - uses: actions/setup-node@v4
       - uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.13.0
@@ -19,9 +20,12 @@ jobs:
         shell: bash
         run: |
           zig build --release=safe
-          zig build gen_registry
-          zip -r registry.json.zip registry.json
-          sha256sum registry.json registry.json.zip > checksums.txt
+          zig build gen_plugins
+          zip -r registry.json.zip editors/nvim/registry.json
+          sha256sum editors/nvim/registry.json registry.json.zip > checksums.txt
+          cd editors/vscode
+          npm install
+          ./node_modules/.bin/vsce package
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
@@ -32,3 +36,6 @@ jobs:
             registry.json.zip
             checksums.txt
             zig-out/bin/censor-ls
+            editors/vscode/censor-ls-0.0.1.vsix
+            editors/nvim/plugin.lua
+

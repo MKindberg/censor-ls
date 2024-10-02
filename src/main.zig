@@ -20,6 +20,8 @@ const Lsp = lsp.Lsp(State);
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
 
+var server: ?Lsp = null;
+
 pub fn main() !u8 {
     const server_data = lsp.types.ServerData{
         .serverInfo = .{
@@ -27,15 +29,15 @@ pub fn main() !u8 {
             .version = @embedFile("version"),
         },
     };
-    var server = Lsp.init(allocator, server_data);
-    defer server.deinit();
+    server = Lsp.init(allocator, server_data);
+    defer server.?.deinit();
 
-    server.registerDocOpenCallback(handleOpenDoc);
-    server.registerDocChangeCallback(handleChangeDoc);
-    server.registerHoverCallback(handleHover);
-    server.registerCodeActionCallback(handleCodeAction);
+    server.?.registerDocOpenCallback(handleOpenDoc);
+    server.?.registerDocChangeCallback(handleChangeDoc);
+    server.?.registerHoverCallback(handleHover);
+    server.?.registerCodeActionCallback(handleCodeAction);
 
-    return server.start();
+    return server.?.start();
 }
 
 fn handleOpenDoc(arena: std.mem.Allocator, context: *Lsp.Context) void {
@@ -45,7 +47,7 @@ fn handleOpenDoc(arena: std.mem.Allocator, context: *Lsp.Context) void {
 
     const diagnostics = context.state.?.getDiagnostics(uri, context.document) catch unreachable;
 
-    lsp.writeResponse(arena, lsp.types.Notification.PublishDiagnostics{
+    server.?.writeResponse(arena, lsp.types.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .uri = uri,
@@ -62,7 +64,7 @@ fn handleCloseDoc(_: std.mem.Allocator, context: *Lsp.Context) void {
 fn handleChangeDoc(arena: std.mem.Allocator, context: *Lsp.Context, _: []lsp.types.ChangeEvent) void {
     const diagnostics = context.state.?.getDiagnostics(context.document.uri, context.document) catch unreachable;
 
-    lsp.writeResponse(arena, lsp.types.Notification.PublishDiagnostics{
+    server.?.writeResponse(arena, lsp.types.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .uri = context.document.uri,

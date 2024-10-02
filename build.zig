@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = version_file.getDirectory().path(b, "version"),
     });
 
-    const lsp_server = b.dependency("lsp-server", .{
+    const lsp_server = b.dependency("lsfw", .{
         .target = target,
         .optimize = optimize,
     });
@@ -56,18 +56,14 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_tests.step);
     }
 
-    // Create mason registry
-    const registry_generator = b.addExecutable(.{
-        .name = "generate_registry",
-        .root_source_file = b.path("tools/mason_registry.zig"),
+    const plugin_generator = b.addExecutable(.{
+        .name = "generate_plugins",
+        .root_source_file = b.path("tools/plugins.zig"),
         .target = b.host,
     });
-    registry_generator.root_module.addAnonymousImport("version", .{
-        .root_source_file = version_file.getDirectory().path(b, "version"),
-    });
-    const registry_step = b.step("gen_registry", "Generate mason.nvim registry");
-    const registry_generation = b.addRunArtifact(registry_generator);
-    registry_step.dependOn(&registry_generation.step);
+
+    plugin_generator.root_module.addImport("lsp_plugins", lsp_server.module("plugins"));
+    b.step("gen_plugins", "Generate plugins").dependOn(&b.addRunArtifact(plugin_generator).step);
 
     // Clean
     const clean_step = b.step("clean", "Clean up");
