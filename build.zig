@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = version_file.getDirectory().path(b, "version"),
     });
 
-    const lsp_server = b.dependency("lsfw", .{
+    const lsp_server = b.dependency("babel", .{
         .target = target,
         .optimize = optimize,
     });
@@ -59,17 +59,11 @@ pub fn build(b: *std.Build) void {
     const plugin_generator = b.addExecutable(.{
         .name = "generate_plugins",
         .root_source_file = b.path("tools/plugins.zig"),
-        .target = b.host,
+        .target = b.graph.host,
     });
 
     plugin_generator.root_module.addImport("lsp_plugins", lsp_server.module("plugins"));
     b.step("gen_plugins", "Generate plugins").dependOn(&b.addRunArtifact(plugin_generator).step);
-
-    // Clean
-    const clean_step = b.step("clean", "Clean up");
-
-    clean_step.dependOn(&b.addRemoveDirTree(b.install_path).step);
-    clean_step.dependOn(&b.addRemoveDirTree(b.pathFromRoot(".zig-cache")).step);
 }
 
 fn getVersion(b: *std.Build) []const u8 {

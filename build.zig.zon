@@ -1,12 +1,12 @@
 .{
-    .name = "censor-ls",
+    .name = .censor_ls,
 
     .version = "0.0.0",
 
     .dependencies = .{
-        .lsfw = .{
-            .url = "https://github.com/MKindberg/zig-lsfw/archive/refs/tags/v0.8.1.tar.gz",
-            .hash = "1220859ecbba53933ca063dd2a1cb707b6316a34f0d6b41e0b6eb687c35528a25c3a",
+        .babel = .{
+            .url = "https://github.com/MKindberg/babel/archive/refs/tags/v0.10.0.tar.gz",
+            .hash = "babel-0.10.0-zYhD5yAtAQCzDg3gCad6y6JdnBYuTZFh2N29BFAxhzM_",
         },
     },
     .paths = .{
@@ -14,4 +14,5 @@
         "build.zig.zon",
         "src",
     },
+    .fingerprint = 0xf023aaec6aa72429,
 }

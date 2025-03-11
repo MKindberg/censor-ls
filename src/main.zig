@@ -5,7 +5,7 @@ const lsp = @import("lsp");
 const builtin = @import("builtin");
 
 comptime {
-    const required_zig = "0.13.0";
+    const required_zig = "0.14.0";
     const current_zig = builtin.zig_version;
     const min_zig = std.SemanticVersion.parse(required_zig) catch unreachable;
     if (current_zig.order(min_zig) == .lt) {
@@ -13,7 +13,7 @@ comptime {
     }
 }
 
-pub const std_options = .{ .log_level = if (builtin.mode == .Debug) .debug else .info, .logFn = lsp.log };
+pub const std_options = std.Options{ .log_level = if (builtin.mode == .Debug) .debug else .info, .logFn = lsp.log };
 
 const Lsp = lsp.Lsp(State);
 
@@ -40,14 +40,14 @@ pub fn main() !u8 {
     return server.?.start();
 }
 
-fn handleOpenDoc(arena: std.mem.Allocator, context: *Lsp.Context) void {
-    const uri = context.document.uri;
+fn handleOpenDoc(p: Lsp.OpenDocumentParameters) void {
+    const uri = p.context.document.uri;
     std.log.info("Opened {s}", .{uri});
-    context.state = State.init(allocator, uri) catch unreachable;
+    p.context.state = State.init(allocator, uri) catch unreachable;
 
-    const diagnostics = context.state.?.getDiagnostics(uri, context.document) catch unreachable;
+    const diagnostics = p.context.state.?.getDiagnostics(uri, p.context.document) catch unreachable;
 
-    server.?.writeResponse(arena, lsp.types.Notification.PublishDiagnostics{
+    server.?.writeResponse(p.arena, lsp.types.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
             .uri = uri,
@@ -61,22 +61,22 @@ fn handleCloseDoc(_: std.mem.Allocator, context: *Lsp.Context) void {
     context.state.?.deinit();
 }
 
-fn handleChangeDoc(arena: std.mem.Allocator, context: *Lsp.Context, _: []lsp.types.ChangeEvent) void {
-    const diagnostics = context.state.?.getDiagnostics(context.document.uri, context.document) catch unreachable;
+fn handleChangeDoc(p: Lsp.ChangeDocumentParameters) void {
+    const diagnostics = p.context.state.?.getDiagnostics(p.context.document.uri, p.context.document) catch unreachable;
 
-    server.?.writeResponse(arena, lsp.types.Notification.PublishDiagnostics{
+    server.?.writeResponse(p.arena, lsp.types.Notification.PublishDiagnostics{
         .method = "textDocument/publishDiagnostics",
         .params = .{
-            .uri = context.document.uri,
+            .uri = p.context.document.uri,
             .diagnostics = diagnostics,
         },
     }) catch unreachable;
 }
 
-fn handleHover(_: std.mem.Allocator, context: *Lsp.Context, position: lsp.types.Position) ?[]const u8 {
-    return context.state.?.hover(context.document.uri, context.document, position);
+fn handleHover(p: Lsp.HoverParameters) ?[]const u8 {
+    return p.context.state.?.hover(p.context.document.uri, p.context.document, p.position);
 }
 
-fn handleCodeAction(arena: std.mem.Allocator, context: *Lsp.Context, range: lsp.types.Range) ?[]const lsp.types.Response.CodeAction.Result {
-    return context.state.?.codeAction(arena, context.document, range);
+fn handleCodeAction(p: Lsp.CodeActionParameters) ?[]const lsp.types.Response.CodeAction.Result {
+    return p.context.state.?.codeAction(p.arena, p.context.document, p.range);
 }
